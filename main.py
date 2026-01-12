@@ -2,92 +2,89 @@ import streamlit as st
 import pdfplumber
 import pandas as pd
 import re
+import json
+import os
+
+# Nama file database penyimpanan sementara
+DB_FILE = "database_jadwal.json"
 
 # ==========================================
-# 1. FUNGSI IDENTIFIKASI HALAMAN
+# 1. FUNGSI UTILITAS (SIMPAN/BACA JSON)
+# ==========================================
+def simpan_database(data):
+    with open(DB_FILE, 'w') as f:
+        json.dump(data, f)
+
+def baca_database():
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, 'r') as f:
+            return json.load(f)
+    return None
+
+def reset_database():
+    if os.path.exists(DB_FILE):
+        os.remove(DB_FILE)
+    st.rerun()
+
+# ==========================================
+# 2. FUNGSI EKSTRAKSI (PDF -> DATA MENTAH)
 # ==========================================
 def identifikasi_halaman(pdf):
     hal_guru = None
     hal_jadwal = []
-
     for i, page in enumerate(pdf.pages):
-        text = page.extract_text()
-        if text:
-            text_upper = text.upper()
-            
-            # Ciri halaman guru: Ada kata "NAMA" dan "KODE" atau "DAFTAR GURU"
-            # Kita hindari halaman yang ada kata "PUKUL" (biasanya jadwal)
-            if (("NAMA" in text_upper and "KODE" in text_upper) or "DAFTAR GURU" in text_upper) and "PUKUL" not in text_upper:
-                hal_guru = i
-            
-            # Ciri halaman jadwal: Ada kata kunci jadwal
-            keywords_jadwal = ["SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "WAKTU", "JAM KE"]
-            matches = sum(1 for k in keywords_jadwal if k in text_upper)
-            
-            if matches >= 2:
-                hal_jadwal.append(i)
-    
+        text = page.extract_text() or ""
+        text_upper = text.upper()
+        
+        # Ciri halaman guru
+        if (("NAMA" in text_upper and "KODE" in text_upper) or "DAFTAR GURU" in text_upper) and "PUKUL" not in text_upper:
+            hal_guru = i
+        
+        # Ciri halaman jadwal
+        keywords = ["SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "WAKTU", "JAM KE"]
+        if sum(1 for k in keywords if k in text_upper) >= 2:
+            hal_jadwal.append(i)
     return hal_guru, hal_jadwal
 
-# ==========================================
-# 2. FUNGSI EKSTRAK DATA GURU
-# ==========================================
-def ekstrak_data_guru(pdf, nomor_halaman):
-    data_guru = {} 
+def ekstrak_semua_guru(pdf, nomor_halaman):
+    data_guru = {}
     if nomor_halaman is None: return {}
-
+    
     page = pdf.pages[nomor_halaman]
     tables = page.extract_tables()
-
     for table in tables:
         for row in table:
             clean_row = [str(x).strip() for x in row if x]
-            
-            # Struktur tabel guru: 3 Kolom berulang (Kode, Nama, Mapel)
-            # Index: 0, 3, 6
-            indices_kode = [0, 3, 6] 
-            for i in indices_kode:
-                if i + 1 < len(clean_row): 
+            # Pola 3 kolom: Index 0, 3, 6
+            for i in [0, 3, 6]:
+                if i + 1 < len(clean_row):
                     kode = clean_row[i]
                     nama = clean_row[i+1]
-                    
                     if re.match(r'^\d+[A-Z]?$', kode) and len(nama) > 2:
-                        nama = nama.replace('\n', ' ')
-                        data_guru[kode] = nama
+                        data_guru[kode] = nama.replace('\n', ' ')
     return data_guru
 
-# ==========================================
-# 3. FUNGSI CARI JADWAL (POLA 13 BARIS)
-# ==========================================
-def cari_jadwal_guru(pdf, halaman_jadwal_list, kode_guru, geser_kolom=0):
-    hasil_pencarian = []
+def ekstrak_seluruh_jadwal(pdf, halaman_jadwal_list):
+    """
+    Membaca SELURUH isi tabel jadwal dan menyimpannya ke list.
+    Tidak memfilter guru tertentu, tapi mengambil semua sel.
+    """
+    master_jadwal = []
     
-    # Konfigurasi Pola
+    # Konfigurasi
     LIST_HARI = ["SENIN", "SELASA", "RABU", "KAMIS", "JUMAT"]
-    BARIS_PER_HARI = 13  # Pola 13 baris per hari
-    
-    counter_baris_data = 0 
+    BARIS_PER_HARI = 13
+    counter_baris = 0
 
-    # --- RUMUS PEMETAAN KELAS ---
-    def tebak_kelas(idx, offset):
-        posisi_relatif = idx + offset
-        
-        # Kelas 10 (X) -> Estimasi Kolom 3 s/d 14
-        if 3 <= posisi_relatif <= 14:
-            return f"X-{posisi_relatif - 2}"
-        # Kelas 11 (XI) -> Estimasi Kolom 15 s/d 26
-        elif 15 <= posisi_relatif <= 26:
-            return f"XI-{posisi_relatif - 14}"
-        # Kelas 12 (XII) -> Estimasi Kolom 27 s/d 38
-        elif 27 <= posisi_relatif <= 38:
-            return f"XII-{posisi_relatif - 26}"
-        else:
-            return "?"
+    # Rumus Kelas
+    def tebak_kelas(idx):
+        if 3 <= idx <= 14: return f"X-{idx - 2}"
+        elif 15 <= idx <= 26: return f"XI-{idx - 14}"
+        elif 27 <= idx <= 38: return f"XII-{idx - 26}"
+        return "?"
 
     for i in halaman_jadwal_list:
         page = pdf.pages[i]
-        
-        # Ekstrak tabel dengan strategi garis ketat
         tables = page.extract_tables({
             "vertical_strategy": "lines", 
             "horizontal_strategy": "lines",
@@ -98,110 +95,148 @@ def cari_jadwal_guru(pdf, halaman_jadwal_list, kode_guru, geser_kolom=0):
             for row in table:
                 clean_row = [str(cell).replace('\n', ' ').strip() if cell else "" for cell in row]
                 
-                # Filter baris valid
+                # Filter baris sampah/header
                 if len(clean_row) < 5: continue
-                
                 cek_header = "".join(clean_row).upper()
-                if "WAKTU" in cek_header or "JAM KE" in cek_header:
-                    continue 
+                if "WAKTU" in cek_header or "JAM KE" in cek_header: continue
 
-                # Hitung Hari (Matematika)
-                index_hari = counter_baris_data // BARIS_PER_HARI
+                # Tentukan Hari
+                idx_hari = counter_baris // BARIS_PER_HARI
+                hari = LIST_HARI[idx_hari] if idx_hari < len(LIST_HARI) else "Lainnya"
                 
-                if index_hari < len(LIST_HARI):
-                    hari_sekarang = LIST_HARI[index_hari]
-                else:
-                    hari_sekarang = "Lainnya"
+                # Tentukan Waktu
+                waktu = clean_row[1] if len(clean_row) > 1 else "-"
 
-                waktu_ajar = clean_row[1] if len(clean_row) > 1 else "-"
-                
-                # Cari Kode Guru
+                # Loop semua sel (Kolom Kelas)
                 for col_idx, isi_sel in enumerate(clean_row):
-                    if col_idx < 3: continue 
+                    if col_idx < 3: continue # Skip metadata
                     
-                    if re.search(rf"\b{kode_guru}\b", isi_sel):
-                        nama_kelas = tebak_kelas(col_idx, geser_kolom)
-                        if nama_kelas != "?":
-                            hasil_pencarian.append({
-                                "Hari": hari_sekarang,
-                                "Waktu": waktu_ajar,
-                                "Kelas": nama_kelas,
-                            })
+                    # Jika sel ada isinya (Kode Guru)
+                    if isi_sel and len(isi_sel) < 5: # Validasi kode guru biasanya pendek
+                         # Bersihkan kode (kadang ada spasi nyelip)
+                         kode_bersih = isi_sel.strip()
+                         
+                         kelas = tebak_kelas(col_idx)
+                         if kelas != "?":
+                             master_jadwal.append({
+                                 "kode_guru": kode_bersih,
+                                 "hari": hari,
+                                 "waktu": waktu,
+                                 "kelas": kelas
+                             })
                 
-                counter_baris_data += 1
-
-    return hasil_pencarian
+                counter_baris += 1
+                
+    return master_jadwal
 
 # ==========================================
-# 4. TAMPILAN APLIKASI (STREAMLIT)
+# 3. USER INTERFACE (STREAMLIT)
 # ==========================================
-st.set_page_config(page_title="Jadwal Guru SMAN 1 Margaasih", layout="wide")
+st.set_page_config(page_title="TugasKu - Jadwal Sekolah", layout="wide")
 
-st.title("🏫 Aplikasi Jadwal Guru")
-st.markdown("Upload PDF Jadwal. Sistem menggunakan pola **13 Baris per Hari**.")
+# --- HEADER & TOMBOL RESET ---
+col_head1, col_head2 = st.columns([3, 1])
+with col_head1:
+    st.title("🏫 TugasKu: Jadwal Sekolah")
+with col_head2:
+    # Cek apakah database ada
+    db_exist = os.path.exists(DB_FILE)
+    if db_exist:
+        if st.button("🔄 Reset / Upload Ulang", type="secondary"):
+            reset_database()
 
-# --- SIDEBAR PENGATURAN ---
-st.sidebar.header("🔧 Pengaturan Manual")
+st.divider()
 
-st.sidebar.caption("Jika 'Halaman Jadwal' tidak ketemu:")
-force_page = st.sidebar.checkbox("Set Halaman Jadwal Manual")
-manual_page_num = st.sidebar.number_input("Nomor Halaman (Mulai 0)", min_value=0, value=0)
+# --- LOGIKA UTAMA ---
 
-st.sidebar.markdown("---")
-
-st.sidebar.caption("Jika nama kelas salah (misal X-1 jadi X-2):")
-offset_val = st.sidebar.slider("Geser Posisi Kelas", min_value=-5, max_value=5, value=0)
-
-# --- AREA UPLOAD ---
-uploaded_file = st.file_uploader("Upload PDF Jadwal Disini", type="pdf")
-
-if uploaded_file:
-    with pdfplumber.open(uploaded_file) as pdf:
+# KONDISI 1: DATA SUDAH ADA (TAMPILKAN SEARCH)
+if db_exist:
+    # Load data dari JSON (Sangat Cepat)
+    database = baca_database()
+    dict_guru = database['guru']
+    list_jadwal = database['jadwal']
+    
+    st.success("📂 Data Jadwal Terload dari Database Lokal.")
+    
+    # UI Pencarian
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.subheader("Pencarian Guru")
+        # Dropdown Nama
+        sorted_nama = sorted(list(dict_guru.values()))
+        pilihan_nama = st.selectbox("Pilih Nama Guru:", sorted_nama)
         
-        # 1. Identifikasi Halaman
-        idx_guru, idx_jadwal = identifikasi_halaman(pdf)
+        # Cari Kode
+        kode_terpilih = [k for k, v in dict_guru.items() if v == pilihan_nama][0]
+        st.info(f"Kode Guru: **{kode_terpilih}**")
+    
+    with col2:
+        st.subheader(f"Jadwal: {pilihan_nama}")
         
-        if force_page:
-            idx_jadwal = [manual_page_num]
-            st.info(f"Mode Manual: Menggunakan Halaman {manual_page_num + 1} sebagai Jadwal.")
-
-        if idx_guru is None:
-            idx_guru = 1 if len(pdf.pages) > 1 else 0
-
-        # 2. Ekstrak Data Guru
-        dict_guru = ekstrak_data_guru(pdf, idx_guru)
+        # Filter data jadwal menggunakan Pandas (Filtering DataFrame)
+        df_master = pd.DataFrame(list_jadwal)
         
-        if not dict_guru:
-            st.error("❌ Gagal membaca Data Guru. Pastikan format tabel di PDF benar.")
+        # Cari yang kodenya cocok (Exact Match)
+        df_hasil = df_master[df_master['kode_guru'] == kode_terpilih]
+        
+        if not df_hasil.empty:
+            # Urutkan hari biar rapi
+            hari_order = ["SENIN", "SELASA", "RABU", "KAMIS", "JUMAT"]
+            df_hasil['hari'] = pd.Categorical(df_hasil['hari'], categories=hari_order, ordered=True)
+            df_hasil = df_hasil.sort_values(['hari', 'waktu'])
+            
+            # Tampilkan
+            st.dataframe(
+                df_hasil[['hari', 'waktu', 'kelas']], 
+                width="stretch",
+                hide_index=True
+            )
         else:
-            st.success(f"✅ Data Guru Terbaca: {len(dict_guru)} orang.")
-            
-            st.markdown("---")
-            col1, col2 = st.columns([1, 2])
-            
-            with col1:
-                st.subheader("Pilih Guru")
-                list_nama = sorted(list(dict_guru.values()))
-                pilihan_nama = st.selectbox("Nama Guru:", list_nama)
-                
-                kode_terpilih = [k for k, v in dict_guru.items() if v == pilihan_nama][0]
-                st.info(f"Kode Guru: **{kode_terpilih}**")
-                
-                tombol_cek = st.button("🔍 Cek Jadwal", type="primary")
+            st.warning("Guru ini tidak ditemukan di grid jadwal (Mungkin Guru BK/Piket).")
 
-            with col2:
-                if tombol_cek:
-                    if not idx_jadwal:
-                        st.error("❌ Halaman jadwal belum terdeteksi. Gunakan menu 'Pengaturan Manual' di sebelah kiri.")
-                    else:
-                        with st.spinner("Sedang memproses pola 13 baris..."):
-                            hasil = cari_jadwal_guru(pdf, idx_jadwal, kode_terpilih, offset_val)
-                        
-                        if hasil:
-                            st.subheader(f"Jadwal: {pilihan_nama}")
-                            df = pd.DataFrame(hasil)
-                            # --- PERBAIKAN DI SINI ---
-                            # Menggunakan width="stretch" menggantikan use_container_width=True
-                            st.dataframe(df, width="stretch") 
-                        else:
-                            st.warning("Jadwal tidak ditemukan. Pastikan 'Kalibrasi Posisi Kelas' di sidebar sudah pas.")
+# KONDISI 2: DATA BELUM ADA (TAMPILKAN UPLOAD)
+else:
+    st.info("👋 Halo! Belum ada data jadwal. Silakan upload PDF Jadwal KBM (Merged) untuk inisialisasi.")
+    
+    uploaded_file = st.file_uploader("Upload PDF Jadwal", type="pdf")
+    
+    if uploaded_file:
+        progress_bar = st.progress(0, text="Menganalisis file PDF...")
+        
+        try:
+            with pdfplumber.open(uploaded_file) as pdf:
+                # 1. Identifikasi
+                idx_guru, idx_jadwal = identifikasi_halaman(pdf)
+                
+                # Fallback halaman guru
+                if idx_guru is None: idx_guru = 1 if len(pdf.pages) > 1 else 0
+                
+                if not idx_jadwal:
+                    st.error("Gagal mendeteksi halaman jadwal. Pastikan PDF benar.")
+                else:
+                    progress_bar.progress(30, text="Mengekstrak Data Guru...")
+                    
+                    # 2. Ekstrak Guru
+                    guru_dict = ekstrak_semua_guru(pdf, idx_guru)
+                    
+                    progress_bar.progress(60, text="Mengekstrak Seluruh Grid Jadwal (Ini mungkin butuh 10-20 detik)...")
+                    
+                    # 3. Ekstrak Jadwal (ETL Proses Berat)
+                    jadwal_list = ekstrak_seluruh_jadwal(pdf, idx_jadwal)
+                    
+                    # 4. Simpan ke JSON
+                    full_data = {
+                        "guru": guru_dict,
+                        "jadwal": jadwal_list
+                    }
+                    simpan_database(full_data)
+                    
+                    progress_bar.progress(100, text="Selesai!")
+                    st.success("✅ Database berhasil dibuat! Halaman akan dimuat ulang...")
+                    
+                    # Reload otomatis agar masuk ke KONDISI 1
+                    st.rerun()
+                    
+        except Exception as e:
+            st.error(f"Terjadi kesalahan: {e}")
