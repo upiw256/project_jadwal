@@ -48,7 +48,9 @@ def buat_excel(df, nama_guru):
         # Apply Header
         for col_num, value in enumerate(df.columns.values):
             worksheet.write(0, col_num, value, fmt_header)
-            width = 15 if col_num == 0 else 12
+            # --- UPDATE: PERKECIL KOLOM HARI ---
+            # Kolom Waktu (index 0) = 15, Kolom Hari = 8
+            width = 15 if col_num == 0 else 8 
             worksheet.set_column(col_num, col_num, width)
         
         # Apply Body
@@ -176,7 +178,7 @@ def ekstrak_seluruh_jadwal(pdf, halaman_jadwal_list):
     return master_jadwal
 
 # ==========================================
-# 4. USER INTERFACE (EXPANDER MODE)
+# 4. USER INTERFACE (EXPANDER & COMPACT TABLE)
 # ==========================================
 st.set_page_config(page_title="TugasKu - Jadwal Sekolah", layout="wide")
 
@@ -236,7 +238,7 @@ if os.path.exists(DB_FILE):
             else:
                 st.warning("Data kosong, tidak bisa download.")
 
-    # --- BAGIAN 2: TAMPILAN TABEL (FULL WIDTH) ---
+    # --- BAGIAN 2: TAMPILAN TABEL (COMPACT) ---
     st.subheader(f"📅 Jadwal Mengajar: {pilihan_nama}")
     
     if not df_raw.empty:
@@ -253,16 +255,17 @@ if os.path.exists(DB_FILE):
 
         st.dataframe(
             styled_df, 
-            width=2000, # Memaksa lebar maksimal
-            use_container_width=True, # Responsif
+            width=2000, 
+            use_container_width=True, 
             hide_index=True,
             column_config={
+                # UPDATE: Menggunakan width="small" agar kolom hari lebih kecil
                 "waktu": st.column_config.TextColumn("🕒 Jam", width="small"),
-                "SENIN": st.column_config.TextColumn("Senin", width="medium"),
-                "SELASA": st.column_config.TextColumn("Selasa", width="medium"),
-                "RABU": st.column_config.TextColumn("Rabu", width="medium"),
-                "KAMIS": st.column_config.TextColumn("Kamis", width="medium"),
-                "JUMAT": st.column_config.TextColumn("Jumat", width="medium"),
+                "SENIN": st.column_config.TextColumn("Senin", width="small"),
+                "SELASA": st.column_config.TextColumn("Selasa", width="small"),
+                "RABU": st.column_config.TextColumn("Rabu", width="small"),
+                "KAMIS": st.column_config.TextColumn("Kamis", width="small"),
+                "JUMAT": st.column_config.TextColumn("Jumat", width="small"),
             }
         )
     else:
