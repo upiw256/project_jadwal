@@ -33,9 +33,10 @@ def buat_excel(df_kelas, df_mapel, nama_guru, color_map):
         workbook = writer.book
         worksheet = writer.sheets['Jadwal']
         
+        # Style Excel
         fmt_header = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'fg_color': '#444444', 'font_color': 'white', 'border': 1})
         fmt_waktu = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'bg_color': '#F5F5F5', 'font_color': 'black', 'border': 1})
-        fmt_kosong = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'font_color': '#000000', 'border': 1})
+        fmt_kosong = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'font_color': '#555555', 'border': 1}) # Abu gelap
         
         formats_mapel = {}
         for mapel, hex_color in color_map.items():
@@ -117,7 +118,7 @@ def buat_pdf(df_kelas, df_mapel, nama_guru, color_map_rgb):
                 pdf.set_text_color(0, 0, 0) 
                 pdf.cell(col_w_hari, col_h, isi, border=1, align='C', fill=True)
             else:
-                pdf.set_text_color(0, 0, 0) # Hitam
+                pdf.set_text_color(0, 0, 0)
                 pdf.cell(col_w_hari, col_h, isi, border=1, align='C', fill=False)
         pdf.ln()
     
@@ -209,35 +210,15 @@ def ekstrak_seluruh_jadwal(pdf, halaman_jadwal_list):
 # ==========================================
 st.set_page_config(page_title="TugasKu - Jadwal Sekolah", layout="wide")
 
-# --- CSS "NUCLEAR OPTION" ---
-# Memaksa color-scheme light untuk tabel, sehingga mengabaikan Dark Mode
+# CSS: Hanya mengatur header tabel dan lebar
 st.markdown("""
 <style>
-    /* Paksa container tabel menggunakan skema warna TERANG */
-    [data-testid="stDataFrame"] {
-        color-scheme: light;
-        background-color: white !important;
-    }
-    
-    /* Paksa Header Tabel Gelap & Teks Putih */
+    /* Header Tabel Abu Gelap, Teks Putih */
     thead tr th { 
         background-color: #444444 !important; 
         color: white !important; 
         text-align: center !important; 
     }
-    
-    /* Paksa Body Tabel Putih */
-    tbody tr {
-        background-color: white !important;
-    }
-    
-    /* Paksa SEMUA teks di dalam tabel menjadi HITAM PEKAT */
-    [data-testid="stDataFrame"] div, 
-    [data-testid="stDataFrame"] span, 
-    [data-testid="stDataFrame"] p {
-        color: black !important;
-    }
-    
     .stDataFrame { width: 100% !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -328,15 +309,24 @@ if os.path.exists(DB_FILE):
                 meta_row = df_meta.loc[row.name] 
                 for col, val in row.items():
                     if col in ['waktu', 'index']:
-                        styles.append('background-color: white; color: black !important;') 
+                        # Biarkan mengikuti SYSTEM (Putih di Light, Hitam di Dark)
+                        # Tapi background kita kasih default/transparent
+                        styles.append('') 
                         continue
+                    
                     mapel_val = meta_row[col]
                     
                     if mapel_val in color_map:
+                        # KOTAK BERWARNA:
                         bg = color_map[mapel_val]
+                        # TEKS WAJIB HITAM (color: black !important) karena backgroundnya cerah
                         styles.append(f'background-color: {bg}; color: black !important; font-weight: bold; border: 1px solid white')
                     else:
-                        styles.append('background-color: #ffffff; color: #000000 !important; border: 1px solid #f0f0f0;') 
+                        # KOTAK KOSONG:
+                        # Biarkan mengikuti SYSTEM.
+                        # Jangan set background-color: white, biarkan transparan/default.
+                        # Jangan set color, biarkan default (Hitam di Light, Putih di Dark).
+                        styles.append('') 
                 return styles
 
             styled_df = df_display.style.apply(style_color, axis=1).set_properties(**{'text-align': 'center'})
