@@ -15,18 +15,12 @@ DB_FILE = "database_jadwal.json"
 # ==========================================
 def buat_tabel_matriks(df_input, value_col):
     """Mengubah data list menjadi tabel matriks (Waktu x Hari)."""
-    # Pivot Data
     df_pivot = df_input.pivot_table(index='waktu', columns='hari', values=value_col, aggfunc='first')
-    
-    # Reindex agar urutan hari benar
     hari_order = ["SENIN", "SELASA", "RABU", "KAMIS", "JUMAT"]
     df_pivot = df_pivot.reindex(columns=hari_order)
-    
-    # Sort Waktu & Reset Index
     df_pivot = df_pivot.sort_index()
     df_pivot = df_pivot.reset_index()
     df_pivot = df_pivot.fillna("-")
-    
     return df_pivot
 
 # ==========================================
@@ -39,28 +33,24 @@ def buat_excel(df_kelas, df_mapel, nama_guru, color_map):
         workbook = writer.book
         worksheet = writer.sheets['Jadwal']
         
-        # Style Definitions
         fmt_header = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'fg_color': '#444444', 'font_color': 'white', 'border': 1})
         fmt_waktu = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'bg_color': '#F5F5F5', 'font_color': 'black', 'border': 1})
         fmt_kosong = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'font_color': '#BDBDBD', 'border': 1})
         
-        # Format Dinamis untuk Mapel (Force Black Text)
         formats_mapel = {}
         for mapel, hex_color in color_map.items():
             formats_mapel[mapel] = workbook.add_format({
                 'align': 'center', 'valign': 'vcenter', 
                 'fg_color': hex_color, 
-                'font_color': 'black', # Paksa Hitam
+                'font_color': 'black', 
                 'border': 1, 'bold': True
             })
 
-        # Tulis Header
         for col_num, value in enumerate(df_kelas.columns.values):
             worksheet.write(0, col_num, value, fmt_header)
             width = 15 if col_num == 0 else 10
             worksheet.set_column(col_num, col_num, width)
         
-        # Tulis Isi Tabel
         last_row = 0
         for row_num, row_data in enumerate(df_kelas.values):
             worksheet.write(row_num + 1, 0, row_data[0], fmt_waktu)
@@ -74,10 +64,8 @@ def buat_excel(df_kelas, df_mapel, nama_guru, color_map):
                     worksheet.write(row_num + 1, col_num, cell_value, fmt_kosong)
             last_row = row_num + 1
             
-        # LEGENDA DI BAWAH TABEL
         start_legend = last_row + 3
         worksheet.write(start_legend, 0, "KETERANGAN MAPEL:", workbook.add_format({'bold': True}))
-        
         row_leg = start_legend + 1
         for mapel, fmt in formats_mapel.items():
             worksheet.write(row_leg, 0, "", fmt)
@@ -103,25 +91,21 @@ def buat_pdf(df_kelas, df_mapel, nama_guru, color_map_rgb):
     col_h = 10
     headers = df_kelas.columns.tolist()
     
-    # Header Tabel
     pdf.set_font("Arial", 'B', 10)
-    pdf.set_fill_color(68, 68, 68) # Abu Gelap
-    pdf.set_text_color(255, 255, 255) # Putih
+    pdf.set_fill_color(68, 68, 68) 
+    pdf.set_text_color(255, 255, 255)
     pdf.cell(col_w_waktu, col_h, "JAM", border=1, align='C', fill=True)
     for h in headers[1:]:
         pdf.cell(col_w_hari, col_h, h, border=1, align='C', fill=True)
     pdf.ln()
     
-    # Isi Tabel
     pdf.set_font("Arial", size=10)
     for i, row in df_kelas.iterrows():
-        # Kolom Waktu
         pdf.set_font("Arial", 'B', 9)
-        pdf.set_text_color(0, 0, 0) # Hitam
+        pdf.set_text_color(0, 0, 0)
         pdf.set_fill_color(245, 245, 245)
         pdf.cell(col_w_waktu, col_h, str(row['waktu']), border=1, align='C', fill=True)
         
-        # Kolom Hari
         pdf.set_font("Arial", '', 10)
         for col_name in headers[1:]:
             isi = str(row[col_name])
@@ -130,14 +114,13 @@ def buat_pdf(df_kelas, df_mapel, nama_guru, color_map_rgb):
             if isi != "-" and mapel in color_map_rgb:
                 r, g, b = color_map_rgb[mapel]
                 pdf.set_fill_color(r, g, b)
-                pdf.set_text_color(0, 0, 0) # Force Hitam
+                pdf.set_text_color(0, 0, 0) 
                 pdf.cell(col_w_hari, col_h, isi, border=1, align='C', fill=True)
             else:
-                pdf.set_text_color(150, 150, 150) # Abu-abu
+                pdf.set_text_color(150, 150, 150)
                 pdf.cell(col_w_hari, col_h, isi, border=1, align='C', fill=False)
         pdf.ln()
     
-    # LEGENDA DI PDF
     pdf.ln(10)
     pdf.set_font("Arial", 'B', 10)
     pdf.set_text_color(0, 0, 0)
@@ -147,9 +130,7 @@ def buat_pdf(df_kelas, df_mapel, nama_guru, color_map_rgb):
     for mapel, rgb in color_map_rgb.items():
         r, g, b = rgb
         pdf.set_fill_color(r, g, b)
-        # Kotak Warna Kecil
         pdf.cell(10, 6, "", border=1, fill=True)
-        # Teks Mapel
         pdf.cell(0, 6, f"  :  {mapel}", ln=True)
         pdf.ln(2)
         
@@ -187,8 +168,6 @@ def ekstrak_semua_guru(pdf, nomor_halaman):
     for table in tables:
         for row in table:
             clean_row = [str(x).strip() for x in row if x]
-            # Pola 3 kolom: Index 0, 3, 6 (Asumsi Kolom Kode)
-            # Pastikan struktur kolom cukup panjang
             for i in [0, 3, 6]:
                 if i + 2 < len(clean_row): 
                     kode = clean_row[i]
@@ -230,17 +209,26 @@ def ekstrak_seluruh_jadwal(pdf, halaman_jadwal_list):
 # ==========================================
 st.set_page_config(page_title="TugasKu - Jadwal Sekolah", layout="wide")
 
-# CSS: Paksa Background Putih & Teks Hitam di Tabel
+# CSS SUPER KUAT: Memaksa Teks Tabel Hitam
+# [data-testid="stDataFrame"] p  -> Target teks paragraf di dalam dataframe
+# [data-testid="stDataFrame"] div -> Target div cell
 st.markdown("""
 <style>
+    /* Paksa Header Tabel Gelap */
     thead tr th { 
         background-color: #444444 !important; 
         color: white !important; 
         text-align: center !important; 
     }
+    /* Paksa Latar Belakang Tabel Putih */
     tbody tr {
         background-color: white !important;
     }
+    /* Paksa SEMUA teks di dalam area data tabel menjadi HITAM */
+    [data-testid="stDataFrame"] div[role="gridcell"] {
+        color: #000000 !important;
+    }
+    /* Lebar Tabel Full */
     .stDataFrame { width: 100% !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -263,7 +251,7 @@ if os.path.exists(DB_FILE):
         
         with col_filter1:
             st.markdown("### 1. Pilih Guru")
-            # Pastikan dict_guru tidak kosong
+            # FIX: Cek jika dict_guru kosong
             unique_names = sorted(list(set([v['nama'] for v in dict_guru.values()]))) if dict_guru else []
             
             if unique_names:
@@ -273,12 +261,12 @@ if os.path.exists(DB_FILE):
                 
                 st.info(f"Kode: {', '.join(found_codes)}")
                 
-                # --- LEGENDA UI (DENGAN PENGECEKAN) ---
+                # --- LEGENDA UI ---
                 colors_hex = ['#C8E6C9', '#FFF9C4', '#BBDEFB', '#FFCDD2']
                 colors_rgb = [(200, 230, 201), (255, 249, 196), (187, 222, 251), (255, 205, 210)]
                 unique_mapels = sorted(list(set(mapel_info.values())))
                 
-                # FIX: Cek apakah unique_mapels tidak kosong sebelum membuat kolom
+                # FIX: Cek len(unique_mapels) > 0 sebelum st.columns()
                 if len(unique_mapels) > 0:
                     color_map = {m: colors_hex[i % len(colors_hex)] for i, m in enumerate(unique_mapels)}
                     color_map_rgb = {m: colors_rgb[i % len(colors_rgb)] for i, m in enumerate(unique_mapels)}
@@ -291,14 +279,12 @@ if os.path.exists(DB_FILE):
                             unsafe_allow_html=True
                         )
                 else:
-                    # Fallback jika mapel tidak ada
                     color_map = {}
                     color_map_rgb = {}
                     st.caption("Tidak ada data mapel spesifik.")
             else:
-                st.warning("Data guru kosong. Silakan reset dan upload ulang PDF.")
+                st.warning("Data guru kosong.")
                 pilihan_nama = None
-                found_codes = []
 
         with col_filter2:
             st.markdown("### 2. Download Jadwal")
@@ -321,9 +307,9 @@ if os.path.exists(DB_FILE):
                             st.download_button("📑 PDF", file_pdf, f'Jadwal_{pilihan_nama}.pdf', 'application/pdf', use_container_width=True)
                         except Exception as e: st.error(f"PDF Error: {e}")
                 else:
-                    st.warning("Data kosong.")
+                    st.warning("Data jadwal kosong.")
 
-    # TAMPILAN TABEL UTAMA
+    # TAMPILAN TABEL
     if pilihan_nama:
         st.subheader(f"📅 Jadwal Mengajar: {pilihan_nama}")
         
@@ -336,13 +322,15 @@ if os.path.exists(DB_FILE):
                 meta_row = df_meta.loc[row.name] 
                 for col, val in row.items():
                     if col in ['waktu', 'index']:
-                        styles.append('background-color: white; color: black;') 
+                        # Pastikan kolom waktu juga hitam
+                        styles.append('background-color: white; color: #000000 !important;') 
                         continue
                     mapel_val = meta_row[col]
                     
                     if mapel_val in color_map:
                         bg = color_map[mapel_val]
-                        styles.append(f'background-color: {bg}; color: black !important; font-weight: bold; border: 1px solid white')
+                        # FIX: Gunakan #000000 (Hex) bukan 'black'
+                        styles.append(f'background-color: {bg}; color: #000000 !important; font-weight: bold; border: 1px solid white')
                     else:
                         styles.append('background-color: #ffffff; color: #cccccc !important; border: 1px solid #f0f0f0;') 
                 return styles
