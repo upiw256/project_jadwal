@@ -35,7 +35,7 @@ def buat_excel(df_kelas, df_mapel, nama_guru, color_map):
         
         fmt_header = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'fg_color': '#444444', 'font_color': 'white', 'border': 1})
         fmt_waktu = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'bg_color': '#F5F5F5', 'font_color': 'black', 'border': 1})
-        fmt_kosong = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'font_color': '#BDBDBD', 'border': 1})
+        fmt_kosong = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'font_color': '#000000', 'border': 1})
         
         formats_mapel = {}
         for mapel, hex_color in color_map.items():
@@ -117,7 +117,7 @@ def buat_pdf(df_kelas, df_mapel, nama_guru, color_map_rgb):
                 pdf.set_text_color(0, 0, 0) 
                 pdf.cell(col_w_hari, col_h, isi, border=1, align='C', fill=True)
             else:
-                pdf.set_text_color(150, 150, 150)
+                pdf.set_text_color(0, 0, 0) # Hitam
                 pdf.cell(col_w_hari, col_h, isi, border=1, align='C', fill=False)
         pdf.ln()
     
@@ -209,26 +209,35 @@ def ekstrak_seluruh_jadwal(pdf, halaman_jadwal_list):
 # ==========================================
 st.set_page_config(page_title="TugasKu - Jadwal Sekolah", layout="wide")
 
-# CSS SUPER KUAT: Memaksa Teks Tabel Hitam
-# [data-testid="stDataFrame"] p  -> Target teks paragraf di dalam dataframe
-# [data-testid="stDataFrame"] div -> Target div cell
+# --- CSS "NUCLEAR OPTION" ---
+# Memaksa color-scheme light untuk tabel, sehingga mengabaikan Dark Mode
 st.markdown("""
 <style>
-    /* Paksa Header Tabel Gelap */
+    /* Paksa container tabel menggunakan skema warna TERANG */
+    [data-testid="stDataFrame"] {
+        color-scheme: light;
+        background-color: white !important;
+    }
+    
+    /* Paksa Header Tabel Gelap & Teks Putih */
     thead tr th { 
         background-color: #444444 !important; 
         color: white !important; 
         text-align: center !important; 
     }
-    /* Paksa Latar Belakang Tabel Putih */
+    
+    /* Paksa Body Tabel Putih */
     tbody tr {
         background-color: white !important;
     }
-    /* Paksa SEMUA teks di dalam area data tabel menjadi HITAM */
-    [data-testid="stDataFrame"] div[role="gridcell"] {
-        color: #000000 !important;
+    
+    /* Paksa SEMUA teks di dalam tabel menjadi HITAM PEKAT */
+    [data-testid="stDataFrame"] div, 
+    [data-testid="stDataFrame"] span, 
+    [data-testid="stDataFrame"] p {
+        color: black !important;
     }
-    /* Lebar Tabel Full */
+    
     .stDataFrame { width: 100% !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -251,7 +260,6 @@ if os.path.exists(DB_FILE):
         
         with col_filter1:
             st.markdown("### 1. Pilih Guru")
-            # FIX: Cek jika dict_guru kosong
             unique_names = sorted(list(set([v['nama'] for v in dict_guru.values()]))) if dict_guru else []
             
             if unique_names:
@@ -261,12 +269,10 @@ if os.path.exists(DB_FILE):
                 
                 st.info(f"Kode: {', '.join(found_codes)}")
                 
-                # --- LEGENDA UI ---
                 colors_hex = ['#C8E6C9', '#FFF9C4', '#BBDEFB', '#FFCDD2']
                 colors_rgb = [(200, 230, 201), (255, 249, 196), (187, 222, 251), (255, 205, 210)]
                 unique_mapels = sorted(list(set(mapel_info.values())))
                 
-                # FIX: Cek len(unique_mapels) > 0 sebelum st.columns()
                 if len(unique_mapels) > 0:
                     color_map = {m: colors_hex[i % len(colors_hex)] for i, m in enumerate(unique_mapels)}
                     color_map_rgb = {m: colors_rgb[i % len(colors_rgb)] for i, m in enumerate(unique_mapels)}
@@ -322,17 +328,15 @@ if os.path.exists(DB_FILE):
                 meta_row = df_meta.loc[row.name] 
                 for col, val in row.items():
                     if col in ['waktu', 'index']:
-                        # Pastikan kolom waktu juga hitam
-                        styles.append('background-color: white; color: #000000 !important;') 
+                        styles.append('background-color: white; color: black !important;') 
                         continue
                     mapel_val = meta_row[col]
                     
                     if mapel_val in color_map:
                         bg = color_map[mapel_val]
-                        # FIX: Gunakan #000000 (Hex) bukan 'black'
-                        styles.append(f'background-color: {bg}; color: #000000 !important; font-weight: bold; border: 1px solid white')
+                        styles.append(f'background-color: {bg}; color: black !important; font-weight: bold; border: 1px solid white')
                     else:
-                        styles.append('background-color: #ffffff; color: #cccccc !important; border: 1px solid #f0f0f0;') 
+                        styles.append('background-color: #ffffff; color: #000000 !important; border: 1px solid #f0f0f0;') 
                 return styles
 
             styled_df = df_display.style.apply(style_color, axis=1).set_properties(**{'text-align': 'center'})
