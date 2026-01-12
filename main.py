@@ -33,17 +33,18 @@ def buat_excel(df_kelas, df_mapel, nama_guru, color_map):
         workbook = writer.book
         worksheet = writer.sheets['Jadwal']
         
-        # Style Excel
+        # Style Definitions
         fmt_header = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'fg_color': '#444444', 'font_color': 'white', 'border': 1})
         fmt_waktu = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'bg_color': '#F5F5F5', 'font_color': 'black', 'border': 1})
-        fmt_kosong = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'font_color': '#555555', 'border': 1}) # Abu gelap
+        fmt_kosong = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'font_color': '#555555', 'border': 1})
         
+        # Format Dinamis
         formats_mapel = {}
         for mapel, hex_color in color_map.items():
             formats_mapel[mapel] = workbook.add_format({
                 'align': 'center', 'valign': 'vcenter', 
                 'fg_color': hex_color, 
-                'font_color': 'black', 
+                'font_color': 'black', # Pastikan hitam di Excel
                 'border': 1, 'bold': True
             })
 
@@ -92,6 +93,7 @@ def buat_pdf(df_kelas, df_mapel, nama_guru, color_map_rgb):
     col_h = 10
     headers = df_kelas.columns.tolist()
     
+    # Header
     pdf.set_font("Arial", 'B', 10)
     pdf.set_fill_color(68, 68, 68) 
     pdf.set_text_color(255, 255, 255)
@@ -100,13 +102,16 @@ def buat_pdf(df_kelas, df_mapel, nama_guru, color_map_rgb):
         pdf.cell(col_w_hari, col_h, h, border=1, align='C', fill=True)
     pdf.ln()
     
+    # Body
     pdf.set_font("Arial", size=10)
     for i, row in df_kelas.iterrows():
+        # Kolom Waktu
         pdf.set_font("Arial", 'B', 9)
-        pdf.set_text_color(0, 0, 0)
+        pdf.set_text_color(0, 0, 0) # Hitam
         pdf.set_fill_color(245, 245, 245)
         pdf.cell(col_w_waktu, col_h, str(row['waktu']), border=1, align='C', fill=True)
         
+        # Kolom Hari
         pdf.set_font("Arial", '', 10)
         for col_name in headers[1:]:
             isi = str(row[col_name])
@@ -115,13 +120,14 @@ def buat_pdf(df_kelas, df_mapel, nama_guru, color_map_rgb):
             if isi != "-" and mapel in color_map_rgb:
                 r, g, b = color_map_rgb[mapel]
                 pdf.set_fill_color(r, g, b)
-                pdf.set_text_color(0, 0, 0) 
+                pdf.set_text_color(0, 0, 0) # Force Hitam
                 pdf.cell(col_w_hari, col_h, isi, border=1, align='C', fill=True)
             else:
-                pdf.set_text_color(0, 0, 0)
+                pdf.set_text_color(0, 0, 0) # Hitam (Default PDF putih)
                 pdf.cell(col_w_hari, col_h, isi, border=1, align='C', fill=False)
         pdf.ln()
     
+    # Legend
     pdf.ln(10)
     pdf.set_font("Arial", 'B', 10)
     pdf.set_text_color(0, 0, 0)
@@ -210,15 +216,16 @@ def ekstrak_seluruh_jadwal(pdf, halaman_jadwal_list):
 # ==========================================
 st.set_page_config(page_title="TugasKu - Jadwal Sekolah", layout="wide")
 
-# CSS: Hanya mengatur header tabel dan lebar
+# CSS: Perbaikan Header agar tetap terlihat di Dark Mode
 st.markdown("""
 <style>
-    /* Header Tabel Abu Gelap, Teks Putih */
+    /* Header Tabel Gelap & Teks Putih */
     thead tr th { 
-        background-color: #444444 !important; 
+        background-color: #333333 !important; 
         color: white !important; 
         text-align: center !important; 
     }
+    /* Pastikan lebar tabel full */
     .stDataFrame { width: 100% !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -296,7 +303,6 @@ if os.path.exists(DB_FILE):
                 else:
                     st.warning("Data jadwal kosong.")
 
-    # TAMPILAN TABEL
     if pilihan_nama:
         st.subheader(f"📅 Jadwal Mengajar: {pilihan_nama}")
         
@@ -309,23 +315,19 @@ if os.path.exists(DB_FILE):
                 meta_row = df_meta.loc[row.name] 
                 for col, val in row.items():
                     if col in ['waktu', 'index']:
-                        # Biarkan mengikuti SYSTEM (Putih di Light, Hitam di Dark)
-                        # Tapi background kita kasih default/transparent
+                        # Biarkan ikut system (Warna Waktu)
                         styles.append('') 
                         continue
                     
                     mapel_val = meta_row[col]
                     
                     if mapel_val in color_map:
-                        # KOTAK BERWARNA:
+                        # KOTAK ADA ISI -> WARNA CERAH -> TEKS WAJIB HITAM
                         bg = color_map[mapel_val]
-                        # TEKS WAJIB HITAM (color: black !important) karena backgroundnya cerah
-                        styles.append(f'background-color: {bg}; color: black !important; font-weight: bold; border: 1px solid white')
+                        styles.append(f'background-color: {bg}; color: #000000 !important; font-weight: bold; border: 1px solid #555;')
                     else:
-                        # KOTAK KOSONG:
-                        # Biarkan mengikuti SYSTEM.
-                        # Jangan set background-color: white, biarkan transparan/default.
-                        # Jangan set color, biarkan default (Hitam di Light, Putih di Dark).
+                        # KOTAK KOSONG -> BIARKAN DEFAULT (Hitam di Dark Mode, Putih di Light Mode)
+                        # Kita return string kosong agar Streamlit memakai warna default system
                         styles.append('') 
                 return styles
 
