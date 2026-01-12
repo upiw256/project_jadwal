@@ -24,7 +24,6 @@ def identifikasi_halaman(pdf):
             keywords_jadwal = ["SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "WAKTU", "JAM KE"]
             matches = sum(1 for k in keywords_jadwal if k in text_upper)
             
-            # Jika minimal 2 kata kunci ditemukan, simpan sebagai halaman jadwal
             if matches >= 2:
                 hal_jadwal.append(i)
     
@@ -52,7 +51,6 @@ def ekstrak_data_guru(pdf, nomor_halaman):
                     kode = clean_row[i]
                     nama = clean_row[i+1]
                     
-                    # Validasi format kode (Angka/Huruf pendek) dan Nama (Panjang)
                     if re.match(r'^\d+[A-Z]?$', kode) and len(nama) > 2:
                         nama = nama.replace('\n', ' ')
                         data_guru[kode] = nama
@@ -66,9 +64,8 @@ def cari_jadwal_guru(pdf, halaman_jadwal_list, kode_guru, geser_kolom=0):
     
     # Konfigurasi Pola
     LIST_HARI = ["SENIN", "SELASA", "RABU", "KAMIS", "JUMAT"]
-    BARIS_PER_HARI = 13  # Sesuai info user: 13 baris per hari (termasuk istirahat)
+    BARIS_PER_HARI = 13  # Pola 13 baris per hari
     
-    # Counter global untuk melacak posisi baris data
     counter_baris_data = 0 
 
     # --- RUMUS PEMETAAN KELAS ---
@@ -99,23 +96,16 @@ def cari_jadwal_guru(pdf, halaman_jadwal_list, kode_guru, geser_kolom=0):
         
         for table in tables:
             for row in table:
-                # Bersihkan sel dari enter dan spasi berlebih
                 clean_row = [str(cell).replace('\n', ' ').strip() if cell else "" for cell in row]
                 
-                # --- FILTER BARIS ---
-                # 1. Skip baris kosong/pendek
+                # Filter baris valid
                 if len(clean_row) < 5: continue
                 
-                # 2. Skip Header (Baris judul kolom)
-                # Cek apakah baris ini berisi kata "WAKTU" atau "JAM KE"
                 cek_header = "".join(clean_row).upper()
                 if "WAKTU" in cek_header or "JAM KE" in cek_header:
                     continue 
 
-                # --- HITUNG HARI ---
-                # Menggunakan matematika integer division
-                # 0-12 = Index 0 (Senin)
-                # 13-25 = Index 1 (Selasa), dst.
+                # Hitung Hari (Matematika)
                 index_hari = counter_baris_data // BARIS_PER_HARI
                 
                 if index_hari < len(LIST_HARI):
@@ -123,19 +113,14 @@ def cari_jadwal_guru(pdf, halaman_jadwal_list, kode_guru, geser_kolom=0):
                 else:
                     hari_sekarang = "Lainnya"
 
-                # Ambil info Waktu (Kolom ke-2)
                 waktu_ajar = clean_row[1] if len(clean_row) > 1 else "-"
                 
-                # --- CARI KODE GURU ---
+                # Cari Kode Guru
                 for col_idx, isi_sel in enumerate(clean_row):
-                    # Skip 3 kolom pertama (Hari, Waktu, Jam Ke)
                     if col_idx < 3: continue 
                     
-                    # Cek kode guru (Word Boundary agar akurat)
                     if re.search(rf"\b{kode_guru}\b", isi_sel):
-                        
                         nama_kelas = tebak_kelas(col_idx, geser_kolom)
-                        
                         if nama_kelas != "?":
                             hasil_pencarian.append({
                                 "Hari": hari_sekarang,
@@ -143,8 +128,6 @@ def cari_jadwal_guru(pdf, halaman_jadwal_list, kode_guru, geser_kolom=0):
                                 "Kelas": nama_kelas,
                             })
                 
-                # PENTING: Increment counter setiap kali kita melewati satu baris jadwal
-                # (Baik itu jam pelajaran maupun istirahat)
                 counter_baris_data += 1
 
     return hasil_pencarian
@@ -160,14 +143,12 @@ st.markdown("Upload PDF Jadwal. Sistem menggunakan pola **13 Baris per Hari**.")
 # --- SIDEBAR PENGATURAN ---
 st.sidebar.header("🔧 Pengaturan Manual")
 
-# Opsi Override Halaman
 st.sidebar.caption("Jika 'Halaman Jadwal' tidak ketemu:")
 force_page = st.sidebar.checkbox("Set Halaman Jadwal Manual")
 manual_page_num = st.sidebar.number_input("Nomor Halaman (Mulai 0)", min_value=0, value=0)
 
 st.sidebar.markdown("---")
 
-# Opsi Kalibrasi Kolom
 st.sidebar.caption("Jika nama kelas salah (misal X-1 jadi X-2):")
 offset_val = st.sidebar.slider("Geser Posisi Kelas", min_value=-5, max_value=5, value=0)
 
@@ -180,12 +161,10 @@ if uploaded_file:
         # 1. Identifikasi Halaman
         idx_guru, idx_jadwal = identifikasi_halaman(pdf)
         
-        # Override jika user memilih manual
         if force_page:
             idx_jadwal = [manual_page_num]
             st.info(f"Mode Manual: Menggunakan Halaman {manual_page_num + 1} sebagai Jadwal.")
 
-        # Default fallback untuk halaman guru
         if idx_guru is None:
             idx_guru = 1 if len(pdf.pages) > 1 else 0
 
@@ -205,7 +184,6 @@ if uploaded_file:
                 list_nama = sorted(list(dict_guru.values()))
                 pilihan_nama = st.selectbox("Nama Guru:", list_nama)
                 
-                # Ambil Kode
                 kode_terpilih = [k for k, v in dict_guru.items() if v == pilihan_nama][0]
                 st.info(f"Kode Guru: **{kode_terpilih}**")
                 
@@ -222,6 +200,8 @@ if uploaded_file:
                         if hasil:
                             st.subheader(f"Jadwal: {pilihan_nama}")
                             df = pd.DataFrame(hasil)
-                            st.dataframe(df, use_container_width=True)
+                            # --- PERBAIKAN DI SINI ---
+                            # Menggunakan width="stretch" menggantikan use_container_width=True
+                            st.dataframe(df, width="stretch") 
                         else:
                             st.warning("Jadwal tidak ditemukan. Pastikan 'Kalibrasi Posisi Kelas' di sidebar sudah pas.")
