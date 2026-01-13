@@ -11,16 +11,15 @@ from fpdf import FPDF
 DB_FILE = "database_jadwal.json"
 
 # ==========================================
-# 0. KAMUS & PEMBERSIH KODE (LOGIKA CERDAS)
+# 0. KAMUS & PEMBERSIH KODE
 # ==========================================
 def bersihkan_kode(raw_text, hari=None):
     """
-    Membersihkan kode guru dengan konteks HARI.
+    Membersihkan kode guru dengan logika AMAN (Anti-Hapus Kode 2 Digit).
     """
     if not raw_text or raw_text == "-":
         return []
 
-    # Pecah teks berdasarkan spasi/enter
     tokens = re.split(r'[\s\n]+', str(raw_text).strip())
     
     cleaned_codes = []
@@ -30,15 +29,19 @@ def bersihkan_kode(raw_text, hari=None):
         
         # --- FIX TYPO SPESIFIK ---
         
-        # KASUS: 32A di hari JUMAT adalah Typo (Harusnya 35A - Reiza)
-        # Tapi di hari lain, 32A adalah Valid (Lukman - Informatika)
+        # 1. Fix Typo 32A di Jumat (Request Awal)
         if hari == "JUMAT" and token == "32A":
             token = "35A"
             
-        # KASUS OCR (Salah baca angka mirip huruf)
-        if re.match(r'^\d+8$', token): token = token[:-1] + "B" # 328 -> 32B
-        elif re.match(r'^\d+4$', token): token = token[:-1] + "A" # 774 -> 77A
-        elif token == "O5": token = "05"
+        # 2. Fix Typo OCR (Angka Mirip Huruf)
+        # HANYA TERAPKAN JIKA PANJANG KODE > 2 DIGIT (Misal 328, 774)
+        # Agar kode 24, 44, 14 tidak rusak jadi 2A, 4A, 1A.
+        if len(token) > 2:
+            if re.match(r'^\d+8$', token): token = token[:-1] + "B" # 328 -> 32B
+            elif re.match(r'^\d+4$', token): token = token[:-1] + "A" # 774 -> 77A
+            
+        # Fix manual karakter khusus
+        if token == "O5": token = "05"
         elif token == "l2": token = "12"
             
         cleaned_codes.append(token)
@@ -46,9 +49,7 @@ def bersihkan_kode(raw_text, hari=None):
     return cleaned_codes
 
 def get_guru_info_display(raw_kode_list, dict_guru):
-    """Mengubah list kode menjadi teks 'Mapel (Guru)'"""
     if not raw_kode_list: return "-"
-    
     display_list = []
     for kode in raw_kode_list:
         if kode in dict_guru:
@@ -57,23 +58,18 @@ def get_guru_info_display(raw_kode_list, dict_guru):
             display_list.append(f"{g['mapel']} ({nama_pendek})")
         else:
             display_list.append(kode)
-            
     return "\n+\n".join(display_list)
 
 # ==========================================
 # 1. FUNGSI FORMATTING
 # ==========================================
 def buat_tabel_matriks(df_input, value_col):
-    # Pivot
     df_pivot = df_input.pivot_table(index='jam_ke_clean', columns='hari', values=value_col, aggfunc='first')
-    
     hari_order = ["SENIN", "SELASA", "RABU", "KAMIS", "JUMAT"]
     df_pivot = df_pivot.reindex(columns=hari_order)
-    
     df_pivot = df_pivot.sort_index()
     df_pivot = df_pivot.reset_index()
     df_pivot = df_pivot.fillna("-")
-    
     df_pivot.rename(columns={'jam_ke_clean': 'Jam Ke'}, inplace=True)
     return df_pivot
 
@@ -99,10 +95,7 @@ def buat_excel(df_display, nama_guru, color_map):
         for row_num, row_data in enumerate(df_display.values):
             worksheet.write(row_num + 1, 0, row_data[0], fmt_jam)
             for col_num, cell_value in enumerate(row_data[1:], start=1):
-                col_name = df_display.columns[col_num]
-                # Pewarnaan Excel (Optional Logic Here if needed, currently generic)
                 worksheet.write(row_num + 1, col_num, cell_value, fmt_wrap)
-                
     return output.getvalue()
 
 def buat_pdf(df_display, nama_guru):
@@ -157,9 +150,7 @@ def buat_pdf(df_display, nama_guru):
             pdf.set_xy(x_current, y_start)
             pdf.multi_cell(w_cols[i], line_height, txt, border=1, align='C')
             x_current += w_cols[i]
-            
         pdf.set_xy(x_start, y_start + row_height)
-        
     return pdf.output(dest='S').encode('latin-1')
 
 # ==========================================
@@ -168,11 +159,14 @@ def buat_pdf(df_display, nama_guru):
 def simpan_database(data):
     with open(DB_FILE, 'w') as f: json.dump(data, f)
 
+# [FIX] FUNGSI BACA DATABASE LEBIH KETAT
+# Mencegah KeyError 'guru' jika file ada tapi kosong
 def baca_database():
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, 'r') as f:
                 data = json.load(f)
+                # Pastikan data tidak kosong dan punya kunci 'guru'
                 if data and isinstance(data, dict) and 'guru' in data and 'jadwal' in data:
                     return data
         except: return None
@@ -204,9 +198,10 @@ def ekstrak_semua_guru(pdf, nomor_halaman):
             clean_row = [str(x).strip() for x in row if x]
             for i in [0, 3, 6]:
                 if i + 2 < len(clean_row): 
-                    # Ambil kode guru. Fix typo 328->32B dilakukan disini tapi JANGAN 32A->35A
+                    # Ambil kode guru. 
                     raw_kode = clean_row[i].split()[0] if clean_row[i] else ""
-                    if re.match(r'^\d+8$', raw_kode): raw_kode = raw_kode[:-1] + "B"
+                    # Fix Typo List Guru (hanya jika > 2 digit)
+                    if len(raw_kode) > 2 and re.match(r'^\d+8$', raw_kode): raw_kode = raw_kode[:-1] + "B"
                     
                     nama = clean_row[i+1]
                     mapel = clean_row[i+2]
@@ -236,7 +231,6 @@ def ekstrak_seluruh_jadwal(pdf, halaman_jadwal_list):
                 cek_header = "".join(clean_row).upper()
                 if "WAKTU" in cek_header and "JAM KE" in cek_header: continue
                 
-                # Raw data untuk kode
                 raw_row_data = [str(cell).strip() if cell else "" for cell in row]
                 
                 waktu = clean_row[1] if len(clean_row) > 1 else "-"
@@ -255,9 +249,7 @@ def ekstrak_seluruh_jadwal(pdf, halaman_jadwal_list):
                     if isi_sel and len(isi_sel) < 100:
                          kelas = tebak_kelas(col_idx)
                          if kelas != "?": 
-                             # [FIX UTAMA] Kirim 'hari' ke fungsi bersihkan_kode
                              cleaned_codes = bersihkan_kode(isi_sel, hari=hari)
-                             
                              if cleaned_codes:
                                  master_jadwal.append({
                                      "jam_ke_clean": jam_ke_clean, 
@@ -295,6 +287,7 @@ if is_reset_mode:
 
 database = baca_database()
 
+# [FIX] CHECK VALIDITY DATABASE SEBELUM AKSES
 if database is not None:
     dict_guru = database['guru']
     list_jadwal = database['jadwal']
