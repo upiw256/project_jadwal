@@ -55,7 +55,7 @@ def buat_excel(df_kelas, df_mapel, nama_guru, color_map):
         fmt_jam = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'bg_color': '#F5F5F5', 'font_color': 'black', 'border': 1})
         fmt_kosong = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'font_color': '#BDBDBD', 'border': 1})
         
-        # Format untuk sel berisi (Wrap text aktif agar (Waktu) bisa turun ke bawah jika sempit)
+        # Format untuk sel berisi (Wrap text aktif)
         formats_mapel = {}
         for mapel, hex_color in color_map.items():
             formats_mapel[mapel] = workbook.add_format({
@@ -69,7 +69,6 @@ def buat_excel(df_kelas, df_mapel, nama_guru, color_map):
         # Atur Lebar Kolom
         for col_num, value in enumerate(df_kelas.columns.values):
             worksheet.write(0, col_num, value, fmt_header)
-            # Lebarkan kolom hari (index > 0) karena isinya sekarang "Kelas (Waktu)"
             width = 25 if col_num > 0 else 10 
             worksheet.set_column(col_num, col_num, width)
         
@@ -107,8 +106,8 @@ def buat_pdf(df_kelas, df_mapel, nama_guru, color_map_rgb):
     pdf.set_font("Arial", size=10)
     
     col_w_jam = 15
-    col_w_hari = 52 # Agak lebar untuk muat teks
-    col_h = 12 # Tinggi baris ditambah biar muat 2 baris (Kelas + Waktu)
+    col_w_hari = 52
+    col_h = 12 
     headers = df_kelas.columns.tolist()
     
     # Header
@@ -121,7 +120,7 @@ def buat_pdf(df_kelas, df_mapel, nama_guru, color_map_rgb):
     pdf.ln()
     
     # Body
-    pdf.set_font("Arial", size=9) # Font agak kecil
+    pdf.set_font("Arial", size=9) 
     for i, row in df_kelas.iterrows():
         # Kolom Jam Ke
         pdf.set_font("Arial", 'B', 9)
@@ -139,7 +138,7 @@ def buat_pdf(df_kelas, df_mapel, nama_guru, color_map_rgb):
                 r, g, b = color_map_rgb[mapel]
                 pdf.set_fill_color(r, g, b)
                 pdf.set_text_color(0, 0, 0)
-                # MultiCell simulation agar teks wrap
+                # MultiCell simulation
                 x = pdf.get_x()
                 y = pdf.get_y()
                 pdf.cell(col_w_hari, col_h, isi, border=1, align='C', fill=True)
@@ -182,8 +181,13 @@ def baca_database():
             return None
     return None
 
+# [FIX] MENGGUNAKAN TRUNCATE FILE ALIH-ALIH DELETE
 def reset_database():
-    if os.path.exists(DB_FILE): os.remove(DB_FILE)
+    # Jangan gunakan os.remove() karena akan error di Docker Windows Volume
+    # Cukup overwrite dengan dictionary kosong "{}"
+    with open(DB_FILE, 'w') as f:
+        json.dump({}, f)
+    
     st.query_params.clear()
     st.rerun()
 
@@ -341,11 +345,8 @@ if database is not None:
                 df_raw['mapel'] = df_raw['kode_guru'].map(lambda x: mapel_info.get(x, '-'))
                 
                 if not df_raw.empty:
-                    # --- [UPDATE] BUAT ISI SEL JADI "KELAS (WAKTU)" ---
-                    # Kita buat kolom baru 'tampilan_sel'
                     df_raw['tampilan_sel'] = df_raw.apply(lambda x: f"{x['kelas']} ({x['waktu']})", axis=1)
                     
-                    # Gunakan 'tampilan_sel' sebagai nilai matriks
                     df_matriks_display = buat_tabel_matriks(df_raw, 'tampilan_sel')
                     df_matriks_mapel = buat_tabel_matriks(df_raw, 'mapel')
                     
@@ -365,7 +366,6 @@ if database is not None:
     if pilihan_nama:
         with st.expander(f"📅 Jadwal Mengajar: {pilihan_nama}", expanded=True):
             if 'df_raw' in locals() and not df_raw.empty:
-                # --- [UPDATE] TAMPILAN WEB JUGA IKUT FORMAT BARU ---
                 if 'tampilan_sel' not in df_raw.columns:
                      df_raw['tampilan_sel'] = df_raw.apply(lambda x: f"{x['kelas']} ({x['waktu']})", axis=1)
                 
@@ -426,7 +426,6 @@ if database is not None:
                     if kode in dict_guru:
                         g = dict_guru[kode]
                         nama_pendek = g['nama'].split(',')[0]
-                        # Format: Mapel (Guru) (Waktu)
                         return f"{g['mapel']} ({nama_pendek})\n({waktu})"
                     return f"{kode} ({waktu})"
 
