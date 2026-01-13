@@ -150,10 +150,21 @@ def buat_pdf(df_kelas, df_mapel, nama_guru, color_map_rgb):
 # ==========================================
 def simpan_database(data):
     with open(DB_FILE, 'w') as f: json.dump(data, f)
+
+# [FIX UTAMA] FUNGSI BACA DATABASE LEBIH AMAN
 def baca_database():
     if os.path.exists(DB_FILE):
-        with open(DB_FILE, 'r') as f: return json.load(f)
+        try:
+            with open(DB_FILE, 'r') as f:
+                data = json.load(f)
+                # Pastikan data bukan kosong dan memiliki kunci 'guru' dan 'jadwal'
+                if data and isinstance(data, dict) and 'guru' in data and 'jadwal' in data:
+                    return data
+                return None
+        except (json.JSONDecodeError, ValueError):
+            return None
     return None
+
 def reset_database():
     if os.path.exists(DB_FILE): os.remove(DB_FILE)
     st.query_params.clear()
@@ -255,8 +266,12 @@ if is_reset_mode:
     st.divider()
 
 # --- LOGIKA UTAMA APLIKASI ---
-if os.path.exists(DB_FILE):
-    database = baca_database()
+database = baca_database()
+
+# [FIX] PENGAMAN UTAMA:
+# Jika database adalah None (file kosong/rusak/tidak ada), anggap kosong.
+# Kode tidak akan masuk ke blok ini, sehingga tidak error saat akses ['guru'].
+if database is not None:
     dict_guru = database['guru']
     list_jadwal = database['jadwal']
     st.success("📂 Database Siap.")
@@ -403,7 +418,7 @@ if os.path.exists(DB_FILE):
             else:
                 st.info("Jadwal kelas ini tidak ditemukan.")
 
-# Jika Database Tidak Ada (Atau baru di-reset) -> Tampilkan Upload
+# Jika Database Kosong/Error -> Tampilkan Upload
 else:
     st.info("👋 Belum ada data. Silakan upload PDF Jadwal (Merged).")
     uploaded_file = st.file_uploader("Upload PDF", type="pdf")
