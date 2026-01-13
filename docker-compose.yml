@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  tugasku:
+    build: .
+    container_name: tugasku_app
+    restart: always  # PENTING: Aplikasi akan nyala sendiri jika VPS restart
+    ports:
+      - "80:8501"    # Mapping Port: Akses via port 80 (langsung IP) -> ke internal 8501
+    volumes:
+      # PENTING: Agar file database_jadwal.json tidak hilang saat container dihapus/update
+      - ./database_jadwal.json:/app/database_jadwal.json
+    environment:
+      - TZ=Asia/Jakarta # Mengatur zona waktu container
