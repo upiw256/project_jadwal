@@ -1,1 +1,51 @@
-*.json
+# --- Python General ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Virtual Environment ---
+# Folder environment biasanya bernama venv, env, atau .venv
+venv/
+env/
+.venv/
+.env
+
+# --- Streamlit ---
+# Jangan pernah upload secrets (password/key) ke GitHub
+.streamlit/secrets.toml
+
+# --- Project Specific (PENTING) ---
+# Mengabaikan database agar data jadwal tidak tertimpa/ter-reset saat pull
+database_jadwal.json
+
+# Opsional: Abaikan semua file JSON jika Anda tidak ingin ada data JSON masuk repo
+# *.json
+
+# --- Generated Files (Sampah/Sementara) ---
+# Mengabaikan file Excel/PDF hasil download manual yang mungkin tersimpan di folder
+*.xlsx
+*.csv
+# Hati-hati jika Anda menyimpan file PDF sumber di folder yang sama, jangan un-comment baris bawah ini
+# *.pdf 
+
+# --- OS Files ---
+.DS_Store
+Thumbs.db
