@@ -9,7 +9,7 @@ from fpdf import FPDF
 
 # Nama file database penyimpanan sementara
 DB_FILE = "database_jadwal.json"
-# http://localhost:8501/?mode=reset
+
 # ==========================================
 # 1. FUNGSI FORMATTING (MATRIX)
 # ==========================================
@@ -156,7 +156,6 @@ def baca_database():
     return None
 def reset_database():
     if os.path.exists(DB_FILE): os.remove(DB_FILE)
-    # Clear query params setelah reset agar kembali ke mode normal
     st.query_params.clear()
     st.rerun()
 
@@ -227,32 +226,42 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Judul Aplikasi
-st.title("🏫 TugasKu: Jadwal Sekolah")
+col_head1, col_head2 = st.columns([3, 1])
+with col_head1: st.title("🏫 TugasKu: Jadwal Sekolah")
+with col_head2:
+    if os.path.exists(DB_FILE):
+        # Tombol Reset Biasa dihapus (sudah diganti mode proteksi di bawah)
+        pass 
 st.divider()
 
-# --- LOGIKA MODE RESET ---
-# Cek apakah ada parameter '?mode=reset' di URL
+# --- LOGIKA MODE RESET (DENGAN PROTEKSI PASSWORD) ---
 is_reset_mode = st.query_params.get("mode") == "reset"
 
 if is_reset_mode:
-    # --- TAMPILAN ADMIN / RESET ---
     st.error("⚠️ **ADMIN ZONE: RESET DATABASE**")
-    st.markdown("Anda berada di mode reset. Klik tombol di bawah untuk menghapus jadwal lama.")
+    st.markdown("Halaman ini terkunci. Masukkan password untuk melanjutkan.")
     
-    if st.button("🗑️ HAPUS DATABASE & RESET", type="primary"):
-        reset_database()
+    # Input Password
+    admin_pass = st.text_input("Masukkan Password Admin:", type="password")
+    
+    if admin_pass == "5414450":
+        st.success("Akses Diterima ✅")
+        st.warning("Peringatan: Tindakan ini akan menghapus semua data jadwal!")
+        if st.button("🗑️ HAPUS DATABASE & RESET", type="primary"):
+            reset_database()
+    elif admin_pass:
+        st.error("Password Salah! ❌")
         
     st.divider()
 
 # --- LOGIKA UTAMA APLIKASI ---
-# Jika Database Ada -> Tampilkan Menu Jadwal
 if os.path.exists(DB_FILE):
     database = baca_database()
     dict_guru = database['guru']
     list_jadwal = database['jadwal']
+    st.success("📂 Database Siap.")
     
-    # 1. EXPANDER PENCARIAN GURU
+    # 1. EXPANDER PENCARIAN
     with st.expander("🔍 Klik untuk Cari Guru / Download", expanded=True):
         col_filter1, col_filter2 = st.columns([2, 2])
         
@@ -303,11 +312,11 @@ if os.path.exists(DB_FILE):
                     c1, c2 = st.columns(2)
                     with c1:
                         file_excel = buat_excel(df_matriks_kelas, df_matriks_mapel, pilihan_nama, color_map)
-                        st.download_button("📄 Excel", file_excel, f'Jadwal_{pilihan_nama}.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', width='stretch')
+                        st.download_button("📄 Excel", file_excel, f'Jadwal_{pilihan_nama}.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', use_container_width=True)
                     with c2:
                         try:
                             file_pdf = buat_pdf(df_matriks_kelas, df_matriks_mapel, pilihan_nama, color_map_rgb)
-                            st.download_button("📑 PDF", file_pdf, f'Jadwal_{pilihan_nama}.pdf', 'application/pdf', width='stretch')
+                            st.download_button("📑 PDF", file_pdf, f'Jadwal_{pilihan_nama}.pdf', 'application/pdf', use_container_width=True)
                         except Exception as e: st.error(f"PDF Error: {e}")
                 else:
                     st.warning("Data jadwal kosong.")
@@ -339,7 +348,8 @@ if os.path.exists(DB_FILE):
 
                 st.dataframe(
                     styled_df, 
-                    width='stretch', 
+                    width=2000, 
+                    use_container_width=True, 
                     hide_index=True,
                     column_config={
                         "waktu": st.column_config.TextColumn("🕒 Jam", width="small"),
@@ -378,7 +388,8 @@ if os.path.exists(DB_FILE):
                 
                 st.dataframe(
                     df_matrix_kelas,
-                    width='stretch',
+                    width=2000,
+                    use_container_width=True,
                     hide_index=True,
                     column_config={
                         "waktu": st.column_config.TextColumn("🕒 Jam", width="small"),
@@ -392,7 +403,7 @@ if os.path.exists(DB_FILE):
             else:
                 st.info("Jadwal kelas ini tidak ditemukan.")
 
-# Jika Database Tidak Ada -> Tampilkan Upload (Selalu muncul saat DB kosong)
+# Jika Database Tidak Ada (Atau baru di-reset) -> Tampilkan Upload
 else:
     st.info("👋 Belum ada data. Silakan upload PDF Jadwal (Merged).")
     uploaded_file = st.file_uploader("Upload PDF", type="pdf")
