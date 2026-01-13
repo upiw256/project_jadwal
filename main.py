@@ -11,17 +11,31 @@ from fpdf import FPDF
 DB_FILE = "database_jadwal.json"
 
 # ==========================================
-# 1. FUNGSI FORMATTING (MATRIX)
+# 1. FUNGSI FORMATTING (MATRIX BY JAM KE)
 # ==========================================
 def buat_tabel_matriks(df_input, value_col):
-    """Mengubah data list menjadi tabel matriks (Waktu x Hari)."""
-    df_pivot = df_input.pivot_table(index='waktu', columns='hari', values=value_col, aggfunc='first')
+    """Mengubah data list menjadi tabel matriks (Jam Ke x Hari)."""
     
+    # Helper untuk sorting jam ke (1, 2, 3... 10)
+    def bersihkan_jam_ke(x):
+        angka = re.findall(r'\d+', str(x))
+        return int(angka[0]) if angka else 999
+
+    df_input['sort_key'] = df_input['jam_ke'].apply(bersihkan_jam_ke)
+
+    # Pivot Data
+    df_pivot = df_input.pivot_table(index=['sort_key', 'jam_ke'], columns='hari', values=value_col, aggfunc='first')
+    
+    # Reindex hari
     hari_order = ["SENIN", "SELASA", "RABU", "KAMIS", "JUMAT"]
     df_pivot = df_pivot.reindex(columns=hari_order)
     
-    df_pivot = df_pivot.sort_index()
+    # Sort & Reset
+    df_pivot = df_pivot.sort_index(level=0)
     df_pivot = df_pivot.reset_index()
+    
+    # Bersihkan kolom helper
+    df_pivot = df_pivot.drop(columns=['sort_key'])
     df_pivot = df_pivot.fillna("-")
     
     return df_pivot
@@ -38,26 +52,29 @@ def buat_excel(df_kelas, df_mapel, nama_guru, color_map):
         
         # Style Definitions
         fmt_header = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'fg_color': '#444444', 'font_color': 'white', 'border': 1})
-        fmt_waktu = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'bg_color': '#F5F5F5', 'font_color': 'black', 'border': 1})
+        fmt_jam = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'bg_color': '#F5F5F5', 'font_color': 'black', 'border': 1})
         fmt_kosong = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'font_color': '#BDBDBD', 'border': 1})
         
+        # Format untuk sel berisi (Wrap text aktif agar (Waktu) bisa turun ke bawah jika sempit)
         formats_mapel = {}
         for mapel, hex_color in color_map.items():
             formats_mapel[mapel] = workbook.add_format({
                 'align': 'center', 'valign': 'vcenter', 
                 'fg_color': hex_color, 
                 'font_color': 'black', 
-                'border': 1, 'bold': True
+                'border': 1, 'bold': True,
+                'text_wrap': True 
             })
 
+        # Atur Lebar Kolom
         for col_num, value in enumerate(df_kelas.columns.values):
             worksheet.write(0, col_num, value, fmt_header)
-            width = 15 if col_num == 0 else 10
+            # Lebarkan kolom hari (index > 0) karena isinya sekarang "Kelas (Waktu)"
+            width = 25 if col_num > 0 else 10 
             worksheet.set_column(col_num, col_num, width)
         
-        last_row = 0
         for row_num, row_data in enumerate(df_kelas.values):
-            worksheet.write(row_num + 1, 0, row_data[0], fmt_waktu)
+            worksheet.write(row_num + 1, 0, row_data[0], fmt_jam)
             for col_num, cell_value in enumerate(row_data[1:], start=1):
                 col_name = df_kelas.columns[col_num]
                 mapel_val = df_mapel.iloc[row_num][col_name]
@@ -66,9 +83,8 @@ def buat_excel(df_kelas, df_mapel, nama_guru, color_map):
                     worksheet.write(row_num + 1, col_num, cell_value, formats_mapel[mapel_val])
                 else:
                     worksheet.write(row_num + 1, col_num, cell_value, fmt_kosong)
-            last_row = row_num + 1
             
-        start_legend = last_row + 3
+        start_legend = len(df_kelas) + 3
         worksheet.write(start_legend, 0, "KETERANGAN MAPEL:", workbook.add_format({'bold': True}))
         row_leg = start_legend + 1
         for mapel, fmt in formats_mapel.items():
@@ -90,31 +106,31 @@ def buat_pdf(df_kelas, df_mapel, nama_guru, color_map_rgb):
     pdf.add_page()
     pdf.set_font("Arial", size=10)
     
-    col_w_waktu = 35
-    col_w_hari = 48
-    col_h = 10
+    col_w_jam = 15
+    col_w_hari = 52 # Agak lebar untuk muat teks
+    col_h = 12 # Tinggi baris ditambah biar muat 2 baris (Kelas + Waktu)
     headers = df_kelas.columns.tolist()
     
     # Header
     pdf.set_font("Arial", 'B', 10)
     pdf.set_fill_color(68, 68, 68) 
     pdf.set_text_color(255, 255, 255)
-    pdf.cell(col_w_waktu, col_h, "JAM", border=1, align='C', fill=True)
+    pdf.cell(col_w_jam, col_h, "KE", border=1, align='C', fill=True)
     for h in headers[1:]:
         pdf.cell(col_w_hari, col_h, h, border=1, align='C', fill=True)
     pdf.ln()
     
     # Body
-    pdf.set_font("Arial", size=10)
+    pdf.set_font("Arial", size=9) # Font agak kecil
     for i, row in df_kelas.iterrows():
-        # Waktu
+        # Kolom Jam Ke
         pdf.set_font("Arial", 'B', 9)
-        pdf.set_text_color(0, 0, 0) # Hitam
+        pdf.set_text_color(0, 0, 0)
         pdf.set_fill_color(245, 245, 245)
-        pdf.cell(col_w_waktu, col_h, str(row['waktu']), border=1, align='C', fill=True)
+        pdf.cell(col_w_jam, col_h, str(row['jam_ke']), border=1, align='C', fill=True)
         
-        # Hari
-        pdf.set_font("Arial", '', 10)
+        # Kolom Hari
+        pdf.set_font("Arial", '', 9)
         for col_name in headers[1:]:
             isi = str(row[col_name])
             mapel = df_mapel.iloc[i][col_name]
@@ -122,10 +138,13 @@ def buat_pdf(df_kelas, df_mapel, nama_guru, color_map_rgb):
             if isi != "-" and mapel in color_map_rgb:
                 r, g, b = color_map_rgb[mapel]
                 pdf.set_fill_color(r, g, b)
-                pdf.set_text_color(0, 0, 0) # Force Hitam
+                pdf.set_text_color(0, 0, 0)
+                # MultiCell simulation agar teks wrap
+                x = pdf.get_x()
+                y = pdf.get_y()
                 pdf.cell(col_w_hari, col_h, isi, border=1, align='C', fill=True)
             else:
-                pdf.set_text_color(0, 0, 0) # Hitam
+                pdf.set_text_color(0, 0, 0)
                 pdf.cell(col_w_hari, col_h, isi, border=1, align='C', fill=False)
         pdf.ln()
     
@@ -151,13 +170,11 @@ def buat_pdf(df_kelas, df_mapel, nama_guru, color_map_rgb):
 def simpan_database(data):
     with open(DB_FILE, 'w') as f: json.dump(data, f)
 
-# [FIX UTAMA] FUNGSI BACA DATABASE LEBIH AMAN
 def baca_database():
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, 'r') as f:
                 data = json.load(f)
-                # Pastikan data bukan kosong dan memiliki kunci 'guru' dan 'jadwal'
                 if data and isinstance(data, dict) and 'guru' in data and 'jadwal' in data:
                     return data
                 return None
@@ -213,22 +230,35 @@ def ekstrak_seluruh_jadwal(pdf, halaman_jadwal_list):
                 clean_row = [str(cell).replace('\n', ' ').strip() if cell else "" for cell in row]
                 if len(clean_row) < 5: continue
                 cek_header = "".join(clean_row).upper()
-                if "WAKTU" in cek_header or "JAM KE" in cek_header: continue
+                if "WAKTU" in cek_header and "JAM KE" in cek_header: continue 
+                
                 waktu = clean_row[1] if len(clean_row) > 1 else "-"
+                jam_ke = clean_row[2] if len(clean_row) > 2 else "?" 
+                
                 if "06.3" in waktu or "06:3" in waktu: current_hari_index += 1
                 hari = LIST_HARI[current_hari_index] if 0 <= current_hari_index < len(LIST_HARI) else "Lainnya"
+                
+                if not jam_ke or len(jam_ke) > 3: continue 
+
                 for col_idx, isi_sel in enumerate(clean_row):
                     if col_idx < 3: continue 
                     if isi_sel and len(isi_sel) < 5: 
                          kode_bersih = isi_sel.strip()
                          kelas = tebak_kelas(col_idx)
-                         if kelas != "?": master_jadwal.append({"kode_guru": kode_bersih, "hari": hari, "waktu": waktu, "kelas": kelas})
+                         if kelas != "?": 
+                             master_jadwal.append({
+                                 "kode_guru": kode_bersih, 
+                                 "hari": hari, 
+                                 "waktu": waktu,   
+                                 "jam_ke": jam_ke, 
+                                 "kelas": kelas
+                             })
     return master_jadwal
 
 # ==========================================
 # 4. USER INTERFACE
 # ==========================================
-st.set_page_config(page_title="SMAN 1 Margaasih - Jadwal Sekolah", layout="wide")
+st.set_page_config(page_title="TugasKu - Jadwal Sekolah", layout="wide")
 
 st.markdown("""
 <style>
@@ -238,23 +268,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 col_head1, col_head2 = st.columns([3, 1])
-with col_head1: st.title("🏫 Aplikasi: Jadwal Sekolah")
+with col_head1: st.title("🏫 TugasKu: Jadwal Sekolah")
 with col_head2:
     if os.path.exists(DB_FILE):
-        # Tombol Reset Biasa dihapus (sudah diganti mode proteksi di bawah)
         pass 
 st.divider()
 
-# --- LOGIKA MODE RESET (DENGAN PROTEKSI PASSWORD) ---
+# --- MODE RESET ---
 is_reset_mode = st.query_params.get("mode") == "reset"
-
 if is_reset_mode:
     st.error("⚠️ **ADMIN ZONE: RESET DATABASE**")
     st.markdown("Halaman ini terkunci. Masukkan password untuk melanjutkan.")
-    
-    # Input Password
     admin_pass = st.text_input("Masukkan Password Admin:", type="password")
-    
     if admin_pass == "5414450":
         st.success("Akses Diterima ✅")
         st.warning("Peringatan: Tindakan ini akan menghapus semua data jadwal!")
@@ -262,21 +287,16 @@ if is_reset_mode:
             reset_database()
     elif admin_pass:
         st.error("Password Salah! ❌")
-        
     st.divider()
 
-# --- LOGIKA UTAMA APLIKASI ---
+# --- LOGIKA UTAMA ---
 database = baca_database()
 
-# [FIX] PENGAMAN UTAMA:
-# Jika database adalah None (file kosong/rusak/tidak ada), anggap kosong.
-# Kode tidak akan masuk ke blok ini, sehingga tidak error saat akses ['guru'].
 if database is not None:
     dict_guru = database['guru']
     list_jadwal = database['jadwal']
     st.success("📂 Database Siap.")
     
-    # 1. EXPANDER PENCARIAN
     with st.expander("🔍 Klik untuk Cari Guru / Download", expanded=True):
         col_filter1, col_filter2 = st.columns([2, 2])
         
@@ -321,16 +341,21 @@ if database is not None:
                 df_raw['mapel'] = df_raw['kode_guru'].map(lambda x: mapel_info.get(x, '-'))
                 
                 if not df_raw.empty:
-                    df_matriks_kelas = buat_tabel_matriks(df_raw, 'kelas')
+                    # --- [UPDATE] BUAT ISI SEL JADI "KELAS (WAKTU)" ---
+                    # Kita buat kolom baru 'tampilan_sel'
+                    df_raw['tampilan_sel'] = df_raw.apply(lambda x: f"{x['kelas']} ({x['waktu']})", axis=1)
+                    
+                    # Gunakan 'tampilan_sel' sebagai nilai matriks
+                    df_matriks_display = buat_tabel_matriks(df_raw, 'tampilan_sel')
                     df_matriks_mapel = buat_tabel_matriks(df_raw, 'mapel')
                     
                     c1, c2 = st.columns(2)
                     with c1:
-                        file_excel = buat_excel(df_matriks_kelas, df_matriks_mapel, pilihan_nama, color_map)
+                        file_excel = buat_excel(df_matriks_display, df_matriks_mapel, pilihan_nama, color_map)
                         st.download_button("📄 Excel", file_excel, f'Jadwal_{pilihan_nama}.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', use_container_width=True)
                     with c2:
                         try:
-                            file_pdf = buat_pdf(df_matriks_kelas, df_matriks_mapel, pilihan_nama, color_map_rgb)
+                            file_pdf = buat_pdf(df_matriks_display, df_matriks_mapel, pilihan_nama, color_map_rgb)
                             st.download_button("📑 PDF", file_pdf, f'Jadwal_{pilihan_nama}.pdf', 'application/pdf', use_container_width=True)
                         except Exception as e: st.error(f"PDF Error: {e}")
                 else:
@@ -340,14 +365,18 @@ if database is not None:
     if pilihan_nama:
         with st.expander(f"📅 Jadwal Mengajar: {pilihan_nama}", expanded=True):
             if 'df_raw' in locals() and not df_raw.empty:
-                df_display = buat_tabel_matriks(df_raw, 'kelas')
+                # --- [UPDATE] TAMPILAN WEB JUGA IKUT FORMAT BARU ---
+                if 'tampilan_sel' not in df_raw.columns:
+                     df_raw['tampilan_sel'] = df_raw.apply(lambda x: f"{x['kelas']} ({x['waktu']})", axis=1)
+                
+                df_display = buat_tabel_matriks(df_raw, 'tampilan_sel')
                 df_meta = buat_tabel_matriks(df_raw, 'mapel') 
                 
                 def style_color(row):
                     styles = []
                     meta_row = df_meta.loc[row.name] 
                     for col, val in row.items():
-                        if col in ['waktu', 'index']:
+                        if col in ['jam_ke', 'sort_key', 'index']:
                             styles.append('')
                             continue
                         
@@ -367,12 +396,12 @@ if database is not None:
                     use_container_width=True, 
                     hide_index=True,
                     column_config={
-                        "waktu": st.column_config.TextColumn("🕒 Jam", width="small"),
-                        "SENIN": st.column_config.TextColumn("Senin", width="small"),
-                        "SELASA": st.column_config.TextColumn("Selasa", width="small"),
-                        "RABU": st.column_config.TextColumn("Rabu", width="small"),
-                        "KAMIS": st.column_config.TextColumn("Kamis", width="small"),
-                        "JUMAT": st.column_config.TextColumn("Jumat", width="small"),
+                        "jam_ke": st.column_config.TextColumn("Jam Ke", width="small"),
+                        "SENIN": st.column_config.TextColumn("Senin", width="medium"),
+                        "SELASA": st.column_config.TextColumn("Selasa", width="medium"),
+                        "RABU": st.column_config.TextColumn("Rabu", width="medium"),
+                        "KAMIS": st.column_config.TextColumn("Kamis", width="medium"),
+                        "JUMAT": st.column_config.TextColumn("Jumat", width="medium"),
                     }
                 )
             else:
@@ -391,14 +420,18 @@ if database is not None:
             df_kelas_filtered = df_master[df_master['kelas'] == pilihan_kelas].copy()
             
             if not df_kelas_filtered.empty:
-                def get_display_text(kode):
+                def get_display_text(row):
+                    kode = row['kode_guru']
+                    waktu = row['waktu']
                     if kode in dict_guru:
                         g = dict_guru[kode]
                         nama_pendek = g['nama'].split(',')[0]
-                        return f"{g['mapel']} ({nama_pendek})"
-                    return kode
+                        # Format: Mapel (Guru) (Waktu)
+                        return f"{g['mapel']} ({nama_pendek})\n({waktu})"
+                    return f"{kode} ({waktu})"
 
-                df_kelas_filtered['isi_sel'] = df_kelas_filtered['kode_guru'].apply(get_display_text)
+                df_kelas_filtered['isi_sel'] = df_kelas_filtered.apply(get_display_text, axis=1)
+                
                 df_matrix_kelas = buat_tabel_matriks(df_kelas_filtered, 'isi_sel')
                 
                 st.dataframe(
@@ -407,7 +440,7 @@ if database is not None:
                     use_container_width=True,
                     hide_index=True,
                     column_config={
-                        "waktu": st.column_config.TextColumn("🕒 Jam", width="small"),
+                        "jam_ke": st.column_config.TextColumn("Jam Ke", width="small"),
                         "SENIN": st.column_config.TextColumn("Senin", width="medium"),
                         "SELASA": st.column_config.TextColumn("Selasa", width="medium"),
                         "RABU": st.column_config.TextColumn("Rabu", width="medium"),
@@ -418,7 +451,6 @@ if database is not None:
             else:
                 st.info("Jadwal kelas ini tidak ditemukan.")
 
-# Jika Database Kosong/Error -> Tampilkan Upload
 else:
     st.info("👋 Belum ada data. Silakan upload PDF Jadwal (Merged).")
     uploaded_file = st.file_uploader("Upload PDF", type="pdf")
