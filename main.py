@@ -9,20 +9,17 @@ from fpdf import FPDF
 
 # Nama file database penyimpanan sementara
 DB_FILE = "database_jadwal.json"
-
+# http://localhost:8501/?mode=reset
 # ==========================================
 # 1. FUNGSI FORMATTING (MATRIX)
 # ==========================================
 def buat_tabel_matriks(df_input, value_col):
     """Mengubah data list menjadi tabel matriks (Waktu x Hari)."""
-    # Pivot Data
     df_pivot = df_input.pivot_table(index='waktu', columns='hari', values=value_col, aggfunc='first')
     
-    # Reindex agar urutan hari benar
     hari_order = ["SENIN", "SELASA", "RABU", "KAMIS", "JUMAT"]
     df_pivot = df_pivot.reindex(columns=hari_order)
     
-    # Sort Waktu & Reset Index
     df_pivot = df_pivot.sort_index()
     df_pivot = df_pivot.reset_index()
     df_pivot = df_pivot.fillna("-")
@@ -44,7 +41,6 @@ def buat_excel(df_kelas, df_mapel, nama_guru, color_map):
         fmt_waktu = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'bg_color': '#F5F5F5', 'font_color': 'black', 'border': 1})
         fmt_kosong = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'font_color': '#BDBDBD', 'border': 1})
         
-        # Format Dinamis
         formats_mapel = {}
         for mapel, hex_color in color_map.items():
             formats_mapel[mapel] = workbook.add_format({
@@ -160,6 +156,8 @@ def baca_database():
     return None
 def reset_database():
     if os.path.exists(DB_FILE): os.remove(DB_FILE)
+    # Clear query params setelah reset agar kembali ke mode normal
+    st.query_params.clear()
     st.rerun()
 
 def identifikasi_halaman(pdf):
@@ -222,31 +220,39 @@ def ekstrak_seluruh_jadwal(pdf, halaman_jadwal_list):
 # ==========================================
 st.set_page_config(page_title="TugasKu - Jadwal Sekolah", layout="wide")
 
-# CSS: Header Abu Gelap, Sisanya mengikuti System
 st.markdown("""
 <style>
-    thead tr th { 
-        background-color: #444444 !important; 
-        color: white !important; 
-        text-align: center !important; 
-    }
+    thead tr th { background-color: #444444 !important; color: white !important; text-align: center !important; }
     .stDataFrame { width: 100% !important; }
 </style>
 """, unsafe_allow_html=True)
 
-col_head1, col_head2 = st.columns([3, 1])
-with col_head1: st.title("🏫 TugasKu: Jadwal Sekolah")
-with col_head2:
-    if os.path.exists(DB_FILE):
-        if st.button("🔄 Reset / Upload Ulang", type="secondary"): reset_database()
+# Judul Aplikasi
+st.title("🏫 TugasKu: Jadwal Sekolah")
 st.divider()
 
+# --- LOGIKA MODE RESET ---
+# Cek apakah ada parameter '?mode=reset' di URL
+is_reset_mode = st.query_params.get("mode") == "reset"
+
+if is_reset_mode:
+    # --- TAMPILAN ADMIN / RESET ---
+    st.error("⚠️ **ADMIN ZONE: RESET DATABASE**")
+    st.markdown("Anda berada di mode reset. Klik tombol di bawah untuk menghapus jadwal lama.")
+    
+    if st.button("🗑️ HAPUS DATABASE & RESET", type="primary"):
+        reset_database()
+        
+    st.divider()
+
+# --- LOGIKA UTAMA APLIKASI ---
+# Jika Database Ada -> Tampilkan Menu Jadwal
 if os.path.exists(DB_FILE):
     database = baca_database()
     dict_guru = database['guru']
     list_jadwal = database['jadwal']
-    st.success("📂 Database Siap.")
     
+    # 1. EXPANDER PENCARIAN GURU
     with st.expander("🔍 Klik untuk Cari Guru / Download", expanded=True):
         col_filter1, col_filter2 = st.columns([2, 2])
         
@@ -275,10 +281,7 @@ if os.path.exists(DB_FILE):
                     cols_legenda = st.columns(len(unique_mapels))
                     for i, m in enumerate(unique_mapels):
                         c = color_map[m]
-                        cols_legenda[i].markdown(
-                            f"<div style='background-color:{c};color:black;padding:5px;margin-bottom:10px;border-radius:5px;text-align:center;border:1px solid #ccc'><b>{m}</b></div>", 
-                            unsafe_allow_html=True
-                        )
+                        cols_legenda[i].markdown(f"<div style='background-color:{c};color:black;padding:5px;border-radius:5px;margin: 10px;text-align:center;border:1px solid #ccc'><b>{m}</b></div>", unsafe_allow_html=True)
                 else:
                     color_map = {}
                     color_map_rgb = {}
@@ -309,37 +312,35 @@ if os.path.exists(DB_FILE):
                 else:
                     st.warning("Data jadwal kosong.")
 
-    # --- TABEL GURU (DALAM EXPANDER) ---
+    # 2. TABEL GURU
     if pilihan_nama:
         with st.expander(f"📅 Jadwal Mengajar: {pilihan_nama}", expanded=True):
             if 'df_raw' in locals() and not df_raw.empty:
                 df_display = buat_tabel_matriks(df_raw, 'kelas')
-                df_meta = buat_tabel_matriks(df_raw, 'mapel')
+                df_meta = buat_tabel_matriks(df_raw, 'mapel') 
                 
-                # --- LOGIKA WARNA YANG BENAR (NATURAL SYSTEM) ---
                 def style_color(row):
                     styles = []
                     meta_row = df_meta.loc[row.name] 
                     for col, val in row.items():
                         if col in ['waktu', 'index']:
-                            styles.append('') # Biarkan System (Hitam/Putih)
+                            styles.append('')
                             continue
                         
                         mapel_val = meta_row[col]
-                        
                         if mapel_val in color_map:
                             bg = color_map[mapel_val]
-                            # WAJIB: Background Warna + Teks Hitam
                             styles.append(f'background-color: {bg}; color: black; font-weight: bold; border: 1px solid white')
                         else:
-                            # WAJIB: Biarkan kosong (Ikuti System - Hitam di Dark Mode)
-                            styles.append('') 
+                            styles.append('')
                     return styles
 
                 styled_df = df_display.style.apply(style_color, axis=1).set_properties(**{'text-align': 'center'})
 
                 st.dataframe(
-                    styled_df, width='stretch', hide_index=True,
+                    styled_df, 
+                    width='stretch', 
+                    hide_index=True,
                     column_config={
                         "waktu": st.column_config.TextColumn("🕒 Jam", width="small"),
                         "SENIN": st.column_config.TextColumn("Senin", width="small"),
@@ -352,7 +353,7 @@ if os.path.exists(DB_FILE):
             else:
                 st.warning("Guru ini tidak memiliki jadwal mengajar di tabel utama.")
 
-    # --- FITUR BARU: JADWAL KELAS ---
+    # 3. TABEL KELAS
     st.divider()
     st.subheader("🏫 Jadwal Berdasarkan Kelas")
     
@@ -365,12 +366,10 @@ if os.path.exists(DB_FILE):
             df_kelas_filtered = df_master[df_master['kelas'] == pilihan_kelas].copy()
             
             if not df_kelas_filtered.empty:
-                # Helper untuk menampilkan Mapel + Nama Guru
                 def get_display_text(kode):
                     if kode in dict_guru:
                         g = dict_guru[kode]
                         nama_pendek = g['nama'].split(',')[0]
-                        # Simpel, tidak perlu warna-warni agar aman
                         return f"{g['mapel']} ({nama_pendek})"
                     return kode
 
@@ -393,6 +392,7 @@ if os.path.exists(DB_FILE):
             else:
                 st.info("Jadwal kelas ini tidak ditemukan.")
 
+# Jika Database Tidak Ada -> Tampilkan Upload (Selalu muncul saat DB kosong)
 else:
     st.info("👋 Belum ada data. Silakan upload PDF Jadwal (Merged).")
     uploaded_file = st.file_uploader("Upload PDF", type="pdf")
