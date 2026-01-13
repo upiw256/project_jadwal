@@ -300,11 +300,11 @@ if os.path.exists(DB_FILE):
                     c1, c2 = st.columns(2)
                     with c1:
                         file_excel = buat_excel(df_matriks_kelas, df_matriks_mapel, pilihan_nama, color_map)
-                        st.download_button("📄 Excel", file_excel, f'Jadwal_{pilihan_nama}.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', use_container_width=True)
+                        st.download_button("📄 Excel", file_excel, f'Jadwal_{pilihan_nama}.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', width='stretch')
                     with c2:
                         try:
                             file_pdf = buat_pdf(df_matriks_kelas, df_matriks_mapel, pilihan_nama, color_map_rgb)
-                            st.download_button("📑 PDF", file_pdf, f'Jadwal_{pilihan_nama}.pdf', 'application/pdf', use_container_width=True)
+                            st.download_button("📑 PDF", file_pdf, f'Jadwal_{pilihan_nama}.pdf', 'application/pdf', width='stretch')
                         except Exception as e: st.error(f"PDF Error: {e}")
                 else:
                     st.warning("Data jadwal kosong.")
@@ -339,7 +339,7 @@ if os.path.exists(DB_FILE):
                 styled_df = df_display.style.apply(style_color, axis=1).set_properties(**{'text-align': 'center'})
 
                 st.dataframe(
-                    styled_df, width=2000, use_container_width=True, hide_index=True,
+                    styled_df, width='stretch', hide_index=True,
                     column_config={
                         "waktu": st.column_config.TextColumn("🕒 Jam", width="small"),
                         "SENIN": st.column_config.TextColumn("Senin", width="small"),
@@ -379,8 +379,7 @@ if os.path.exists(DB_FILE):
                 
                 st.dataframe(
                     df_matrix_kelas,
-                    width=2000,
-                    use_container_width=True,
+                    width='stretch',
                     hide_index=True,
                     column_config={
                         "waktu": st.column_config.TextColumn("🕒 Jam", width="small"),
