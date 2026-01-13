@@ -228,7 +228,7 @@ def ekstrak_seluruh_jadwal(pdf, halaman_jadwal_list):
 # ==========================================
 # 4. USER INTERFACE
 # ==========================================
-st.set_page_config(page_title="TugasKu - Jadwal Sekolah", layout="wide")
+st.set_page_config(page_title="SMAN 1 Margaasih - Jadwal Sekolah", layout="wide")
 
 st.markdown("""
 <style>
@@ -238,7 +238,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 col_head1, col_head2 = st.columns([3, 1])
-with col_head1: st.title("🏫 TugasKu: Jadwal Sekolah")
+with col_head1: st.title("🏫 Aplikasi: Jadwal Sekolah")
 with col_head2:
     if os.path.exists(DB_FILE):
         # Tombol Reset Biasa dihapus (sudah diganti mode proteksi di bawah)
