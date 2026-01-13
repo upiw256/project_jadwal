@@ -264,7 +264,7 @@ if os.path.exists(DB_FILE):
             st.markdown("**Keterangan Mapel:**")
             
             # Warna Palette (Hijau, Kuning, Biru, Merah)
-            colors_hex = ['#C8E6C9', '#FFF9C4', '#BBDEFB', '#FFCDD2']
+            colors_hex = ["#94FA98", "#FAF19F", "#9FD4FF", "#FFA7B0"]
             colors_rgb = [(200, 230, 201), (255, 249, 196), (187, 222, 251), (255, 205, 210)]
             
             # Map setiap Mapel unik ke warna
@@ -276,7 +276,7 @@ if os.path.exists(DB_FILE):
             cols_legenda = st.columns(len(unique_mapels))
             for i, m in enumerate(unique_mapels):
                 c = color_map[m]
-                cols_legenda[i].markdown(f"<div style='background-color:{c};padding:5px;border-radius:5px;text-align:center;border:1px solid #ccc'><b>{m}</b></div>", unsafe_allow_html=True)
+                cols_legenda[i].markdown(f"<div style='background-color:{c};color:black;padding:5px;border-radius:5px;margin: 10px;text-align:center;border:1px solid #ccc'><b>{m}</b></div>", unsafe_allow_html=True)
 
         with col_filter2:
             st.markdown("### 2. Download Jadwal")
