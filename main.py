@@ -11,8 +11,34 @@ from fpdf import FPDF
 DB_FILE = "database_jadwal.json"
 
 # ==========================================
-# 0. KAMUS & PEMBERSIH KODE
+# 0. KAMUS & PEMBERSIH KODE / WAKTU
 # ==========================================
+def perbaiki_waktu(waktu_raw):
+    """
+    Memperbaiki teks waktu yang salah baca atau tidak sesuai keinginan.
+    """
+    if not waktu_raw: return "-"
+    
+    # Normalisasi: Ubah titik dua (:) jadi titik (.) agar konsisten
+    # Contoh: 12:40 -> 12.40
+    w = waktu_raw.replace(':', '.').strip()
+    
+    # KAMUS PERBAIKAN WAKTU
+    # Format: "WAKTU SALAH DI PDF": "WAKTU YANG BENAR"
+    KAMUS_WAKTU = {
+        # Masalah Anda: Sistem baca 12.40, tapi harusnya 12.10
+        "12.40 - 13.20": "12.10 - 13.20",
+        
+        # Contoh lain jika ada typo OCR
+        "07.10 - 07.50": "07.10 - 07.50", 
+    }
+    
+    # Cek apakah waktu ada di kamus (exact match)
+    if w in KAMUS_WAKTU:
+        return KAMUS_WAKTU[w]
+        
+    return w
+
 def bersihkan_kode(raw_text, hari=None):
     """
     Membersihkan kode guru dengan logika AMAN (Anti-Hapus Kode 2 Digit).
@@ -28,19 +54,14 @@ def bersihkan_kode(raw_text, hari=None):
         if not token: continue
         
         # --- FIX TYPO SPESIFIK ---
-        
-        # 1. Fix Typo 32A di Jumat (Request Awal)
         if hari == "JUMAT" and token == "32A":
             token = "35A"
             
-        # 2. Fix Typo OCR (Angka Mirip Huruf)
-        # HANYA TERAPKAN JIKA PANJANG KODE > 2 DIGIT (Misal 328, 774)
-        # Agar kode 24, 44, 14 tidak rusak jadi 2A, 4A, 1A.
+        # Fix Typo OCR (Hanya jika > 2 digit untuk amankan kode 24, 44)
         if len(token) > 2:
             if re.match(r'^\d+8$', token): token = token[:-1] + "B" # 328 -> 32B
             elif re.match(r'^\d+4$', token): token = token[:-1] + "A" # 774 -> 77A
             
-        # Fix manual karakter khusus
         if token == "O5": token = "05"
         elif token == "l2": token = "12"
             
@@ -159,14 +180,11 @@ def buat_pdf(df_display, nama_guru):
 def simpan_database(data):
     with open(DB_FILE, 'w') as f: json.dump(data, f)
 
-# [FIX] FUNGSI BACA DATABASE LEBIH KETAT
-# Mencegah KeyError 'guru' jika file ada tapi kosong
 def baca_database():
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, 'r') as f:
                 data = json.load(f)
-                # Pastikan data tidak kosong dan punya kunci 'guru'
                 if data and isinstance(data, dict) and 'guru' in data and 'jadwal' in data:
                     return data
         except: return None
@@ -198,9 +216,7 @@ def ekstrak_semua_guru(pdf, nomor_halaman):
             clean_row = [str(x).strip() for x in row if x]
             for i in [0, 3, 6]:
                 if i + 2 < len(clean_row): 
-                    # Ambil kode guru. 
                     raw_kode = clean_row[i].split()[0] if clean_row[i] else ""
-                    # Fix Typo List Guru (hanya jika > 2 digit)
                     if len(raw_kode) > 2 and re.match(r'^\d+8$', raw_kode): raw_kode = raw_kode[:-1] + "B"
                     
                     nama = clean_row[i+1]
@@ -233,9 +249,12 @@ def ekstrak_seluruh_jadwal(pdf, halaman_jadwal_list):
                 
                 raw_row_data = [str(cell).strip() if cell else "" for cell in row]
                 
-                waktu = clean_row[1] if len(clean_row) > 1 else "-"
-                jam_ke_raw = clean_row[2] if len(clean_row) > 2 else ""
+                # --- [FIX WAKTU DISINI] ---
+                waktu_raw = clean_row[1] if len(clean_row) > 1 else "-"
+                # Terapkan perbaikan waktu
+                waktu = perbaiki_waktu(waktu_raw)
                 
+                jam_ke_raw = clean_row[2] if len(clean_row) > 2 else ""
                 try: jam_ke_clean = int(re.findall(r'\d+', jam_ke_raw)[0])
                 except: jam_ke_clean = 99
                 
@@ -254,7 +273,7 @@ def ekstrak_seluruh_jadwal(pdf, halaman_jadwal_list):
                                  master_jadwal.append({
                                      "jam_ke_clean": jam_ke_clean, 
                                      "hari": hari, 
-                                     "waktu": waktu,   
+                                     "waktu": waktu, # Sudah diperbaiki 
                                      "kelas": kelas,
                                      "list_kode_guru": cleaned_codes 
                                  })
@@ -287,7 +306,6 @@ if is_reset_mode:
 
 database = baca_database()
 
-# [FIX] CHECK VALIDITY DATABASE SEBELUM AKSES
 if database is not None:
     dict_guru = database['guru']
     list_jadwal = database['jadwal']
