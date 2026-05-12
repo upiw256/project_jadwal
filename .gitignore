@@ -46,6 +46,11 @@ database_jadwal.json
 # Hati-hati jika Anda menyimpan file PDF sumber di folder yang sama, jangan un-comment baris bawah ini
 # *.pdf 
 
+# --- Google API Secrets (SANGAT PENTING) ---
+# File ini mengandung kunci akses pribadi, jangan pernah di-push ke GitHub
+client_secret.json
+token.pickle
+
 # --- OS Files ---
 .DS_Store
 Thumbs.db

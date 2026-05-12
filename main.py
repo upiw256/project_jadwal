@@ -5,10 +5,151 @@ import re
 import json
 import os
 import io
+import pickle
 from fpdf import FPDF
+from datetime import datetime, timedelta
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from google.auth.transport.requests import Request
 
 # Nama file database
 DB_FILE = "database_jadwal.json"
+CLIENT_SECRET_FILE = "client_secret.json"
+TOKEN_FILE = "token.pickle"
+SCOPES = ['https://www.googleapis.com/auth/calendar.events']
+
+# ==========================================
+# GOOGLE CALENDAR LOGIC
+# ==========================================
+def get_google_calendar_service():
+    creds = None
+    if os.path.exists(TOKEN_FILE):
+        try:
+            with open(TOKEN_FILE, 'rb') as token:
+                creds = pickle.load(token)
+        except Exception:
+            creds = None
+    
+    if not creds or not creds.valid:
+        try:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                if not os.path.exists(CLIENT_SECRET_FILE):
+                    st.error(f"File {CLIENT_SECRET_FILE} tidak ditemukan. Silakan unduh dari Google Cloud Console.")
+                    return None
+                flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRET_FILE, SCOPES)
+                creds = flow.run_local_server(port=0)
+            with open(TOKEN_FILE, 'wb') as token:
+                pickle.dump(creds, token)
+        except Exception as e:
+            st.error(f"Gagal autentikasi Google: {e}")
+            if os.path.exists(TOKEN_FILE):
+                os.remove(TOKEN_FILE) # Hapus token rusak
+            return None
+            
+    return build('calendar', 'v3', credentials=creds)
+
+def sync_to_google_calendar(events_data, start_monday, num_weeks=1):
+    service = get_google_calendar_service()
+    if not service:
+        return False
+    
+    # 1. Hapus jadwal lama terlebih dahulu untuk rentang waktu yang dipilih
+    with st.spinner(f"Membersihkan jadwal lama untuk {num_weeks} minggu ke depan..."):
+        delete_from_google_calendar(start_monday, "System", num_weeks=num_weeks, show_ui=False)
+    
+    hari_map = {"SENIN": 0, "SELASA": 1, "RABU": 2, "KAMIS": 3, "JUMAT": 4}
+    
+    progress_bar = st.progress(0, text="Memulai sinkronisasi massal...")
+    
+    total_inserts = len(events_data) * num_weeks
+    current_count = 0
+    
+    try:
+        for week in range(num_weeks):
+            week_monday = start_monday + timedelta(weeks=week)
+            
+            for ev in events_data:
+                days_to_add = hari_map.get(ev['hari'], 0)
+                event_date = week_monday + timedelta(days=days_to_add)
+                
+                times = ev['waktu'].split('-')
+                start_t = times[0].strip().replace('.', ':')
+                end_t = times[1].strip().replace('.', ':')
+                
+                if len(start_t.split(':')[0]) == 1: start_t = "0" + start_t
+                if len(end_t.split(':')[0]) == 1: end_t = "0" + end_t
+
+                start_iso = f"{event_date.strftime('%Y-%m-%d')}T{start_t}:00"
+                end_iso = f"{event_date.strftime('%Y-%m-%d')}T{end_t}:00"
+                
+                event_body = {
+                    'summary': f"Mengajar: {ev['kelas']}",
+                    'description': f"Guru: {st.session_state.get('pilihan_nama', 'Unknown')}\nMata Pelajaran: {ev['mapel']}\nHari: {ev['hari']}\nJam Ke: {ev['jam_ke_clean']}",
+                    'start': {'dateTime': start_iso, 'timeZone': 'Asia/Jakarta'},
+                    'end': {'dateTime': end_iso, 'timeZone': 'Asia/Jakarta'},
+                    # Tambahkan Recurrence rule agar lebih ringan sebenarnya bisa, 
+                    # tapi karena permintaannya "sync ulang hapus dulu", kita pakai loop saja agar kontrol lebih presisi
+                }
+                
+                service.events().insert(calendarId='primary', body=event_body).execute()
+                current_count += 1
+                
+                if current_count % 5 == 0:
+                    progress_bar.progress(current_count / total_inserts, text=f"Sinkronisasi {current_count}/{total_inserts} event...")
+        
+        st.success(f"✅ Berhasil sinkronisasi {total_inserts} jadwal untuk {num_weeks} minggu ke depan!")
+        return True
+    except Exception as e:
+        st.error(f"Terjadi kesalahan saat sinkronisasi: {e}")
+        return False
+
+def delete_from_google_calendar(start_monday, teacher_name, num_weeks=1, show_ui=True):
+    service = get_google_calendar_service()
+    if not service:
+        return False
+    
+    # Tentukan rentang waktu (sampai akhir minggu ke-N)
+    time_min = start_monday.strftime('%Y-%m-%dT00:00:00+07:00')
+    time_max = (start_monday + timedelta(weeks=num_weeks)).strftime('%Y-%m-%dT00:00:00+07:00')
+    
+    if show_ui: progress_bar = st.progress(0, text="Mencari event lama...")
+    
+    try:
+        # Google API list max is usually 250 per page, for 6 months we might have ~1000 events
+        # We need to handle pagination or just set maxResults higher
+        events = []
+        page_token = None
+        while True:
+            events_result = service.events().list(calendarId='primary', timeMin=time_min, timeMax=time_max,
+                                                singleEvents=True, orderBy='startTime', pageToken=page_token).execute()
+            events.extend(events_result.get('items', []))
+            page_token = events_result.get('nextPageToken')
+            if not page_token:
+                break
+        
+        if not events:
+            if show_ui: st.info("Tidak ditemukan event jadwal lama pada rentang tersebut.")
+            return True
+        
+        deleted_count = 0
+        total_events = len(events)
+        
+        for i, event in enumerate(events):
+            summary = event.get('summary', '')
+            if "Mengajar:" in summary:
+                service.events().delete(calendarId='primary', eventId=event['id']).execute()
+                deleted_count += 1
+            
+            if show_ui: progress_bar.progress((i + 1) / total_events, text=f"Menghapus event lama {i+1}/{total_events}...")
+            
+        if show_ui and deleted_count > 0:
+            st.success(f"🗑️ Berhasil menghapus {deleted_count} event jadwal lama.")
+        return True
+    except Exception as e:
+        if show_ui: st.error(f"Gagal menghapus event: {e}")
+        return False
 
 # ==========================================
 # 0. KAMUS & PEMBERSIH KODE / WAKTU
@@ -353,7 +494,9 @@ if database is not None:
                             "jam_ke_clean": row['jam_ke_clean'],
                             "hari": row['hari'],
                             "tampilan": f"{row['kelas']} ({row['waktu']})",
-                            "mapel": mapel_val
+                            "mapel": mapel_val,
+                            "waktu": row['waktu'],
+                            "kelas": row['kelas']
                         })
 
                 if processed_data:
@@ -367,8 +510,37 @@ if database is not None:
                     with c2:
                         file_pdf = buat_pdf(df_matriks_display, pilihan_nama)
                         st.download_button("📑 PDF", file_pdf, f'Jadwal_{pilihan_nama}.pdf', 'application/pdf', use_container_width=True)
-                else:
-                    st.warning("Data jadwal kosong.")
+                
+                st.markdown("### 3. Google Calendar Sync")
+                st.write("Sinkronkan jadwal ini ke kalender pribadi Anda.")
+                
+                # Simpan nama guru di session state untuk diakses fungsi sync
+                st.session_state['pilihan_nama'] = pilihan_nama
+                
+                today = datetime.now()
+                default_monday = today - timedelta(days=today.weekday())
+                
+                col_sync1, col_sync2 = st.columns(2)
+                with col_sync1:
+                    sync_date = st.date_input("Pilih Tanggal Mulai (Senin):", default_monday)
+                with col_sync2:
+                    duration_opt = st.selectbox("Durasi Sinkronisasi:", ["1 Minggu", "6 Bulan (26 Minggu)"])
+                    num_weeks = 1 if duration_opt == "1 Minggu" else 26
+
+                if sync_date.weekday() != 0:
+                    st.warning("⚠️ Sebaiknya pilih hari Senin agar sinkronisasi hari sesuai.")
+                
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    if st.button("🔄 Sync & Update Calendar", type="primary", use_container_width=True):
+                        if processed_data:
+                            sync_to_google_calendar(processed_data, sync_date, num_weeks=num_weeks)
+                        else:
+                            st.error("Tidak ada data untuk disinkronkan.")
+                
+                with col_btn2:
+                    if st.button("🗑️ Bersihkan Calendar", type="secondary", use_container_width=True):
+                        delete_from_google_calendar(sync_date, pilihan_nama, num_weeks=num_weeks)
 
     # TAMPILAN GURU
     if pilihan_nama and 'processed_data' in locals() and processed_data:
