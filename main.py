@@ -4,11 +4,11 @@ import pdfplumber
 from datetime import datetime, timedelta
 
 # Import Modules
-from database_manager import read_database, save_database, reset_database
-from pdf_parser import identify_pages, extract_all_teachers, extract_all_schedules
-from data_processor import create_matrix_table, get_teacher_info_display
-from exporter import export_to_excel, export_to_pdf
-from google_calendar import sync_to_google_calendar, delete_from_google_calendar
+from src.database_manager import read_database, save_database, reset_database
+from src.pdf_parser import identify_pages, extract_all_teachers, extract_all_schedules
+from src.data_processor import create_matrix_table, get_teacher_info_display
+from src.exporter import export_to_excel, export_to_pdf
+from src.google_calendar import sync_to_google_calendar, delete_from_google_calendar
 
 # ==========================================
 # CONFIGURATION & STYLING
