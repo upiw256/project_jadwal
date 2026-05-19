@@ -32,17 +32,17 @@ def sync_to_google_calendar(events_data, start_monday, num_weeks=1):
     service = get_calendar_service()
     if not service: return False
     
-    # Auto-delete existing events first
+    teacher_name = st.session_state.get('pilihan_nama', 'Unknown')
+    
+    # Auto-delete existing events first for the selected teacher
     with st.spinner(f"Membersihkan jadwal lama..."):
-        delete_from_google_calendar(start_monday, "System", num_weeks=num_weeks, show_ui=False)
+        delete_from_google_calendar(start_monday, teacher_name, num_weeks=num_weeks, show_ui=False)
     
     day_map = {"SENIN": 0, "SELASA": 1, "RABU": 2, "KAMIS": 3, "JUMAT": 4, "SABTU": 5}
     progress_bar = st.progress(0, text="Memulai sinkronisasi massal...")
     
     total_inserts = len(events_data) * num_weeks
     current_count = 0
-    
-    teacher_name = st.session_state.get('pilihan_nama', 'Unknown')
     
     try:
         for week in range(num_weeks):
@@ -100,8 +100,10 @@ def delete_from_google_calendar(start_monday, teacher_name, num_weeks=1, show_ui
         deleted_count = 0
         for i, event in enumerate(events):
             if "Mengajar:" in event.get('summary', ''):
-                service.events().delete(calendarId='primary', eventId=event['id']).execute()
-                deleted_count += 1
+                desc = event.get('description', '')
+                if desc and f"Guru: {teacher_name}" in desc:
+                    service.events().delete(calendarId='primary', eventId=event['id']).execute()
+                    deleted_count += 1
             if show_ui: progress_bar.progress((i + 1) / len(events), text=f"Menghapus {i+1}/{len(events)}...")
             
         if show_ui and deleted_count > 0:
