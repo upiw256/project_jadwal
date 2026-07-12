@@ -6,9 +6,13 @@ services:
     container_name: tugasku_app
     restart: always  # PENTING: Aplikasi akan nyala sendiri jika VPS restart
     ports:
-      - "7025:8501"    # Mapping Port: Akses via port 80 (langsung IP) -> ke internal 8501
+      - "7025:8501"    # Mapping Port: Akses via port 7025 (luar) -> ke internal 8501
     volumes:
-      # PENTING: Agar file database_jadwal.json tidak hilang saat container dihapus/update
+      # PENTING: File state/data diikat keluar agar tidak hilang saat container dihapus/update
       - ./database_jadwal.json:/app/database_jadwal.json
+      # Menambahkan token.pickle agar sesi login Google (yang sewaktu-waktu refresh) tetap tersimpan
+      - ./token.pickle:/app/token.pickle
+      # (Opsional) Jika Anda juga ingin mount client_secret.json:
+      # - ./client_secret.json:/app/client_secret.json
     environment:
       - TZ=Asia/Jakarta # Mengatur zona waktu container
