@@ -12,7 +12,7 @@ def main():
         # port=8080 dipakai agar kita tahu port yang harus diakses
         print("\n\n=== ACTION REQUIRED ===")
         print("Jika browser tidak terbuka otomatis, silakan BUKA LINK DI BAWAH INI di browser Anda:")
-        creds = flow.run_local_server(port=8080, open_browser=False)
+        creds = flow.run_local_server(port=5050, open_browser=True)
         
         with open('token.pickle', 'wb') as token:
             pickle.dump(creds, token)

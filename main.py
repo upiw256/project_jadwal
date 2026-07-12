@@ -8,7 +8,7 @@ from src.database_manager import read_database, save_database, reset_database
 from src.pdf_parser import identify_pages, extract_all_teachers, extract_all_schedules
 from src.data_processor import create_matrix_table, get_teacher_info_display
 from src.exporter import export_to_excel, export_to_pdf
-from src.google_calendar import sync_to_google_calendar, delete_from_google_calendar
+from src.google_calendar import sync_to_google_calendar, delete_from_google_calendar, is_logged_in, logout_google
 
 # ==========================================
 # CONFIGURATION & STYLING
@@ -25,7 +25,16 @@ st.markdown("""
 def main():
     # Header
     col_head1, col_head2 = st.columns([3, 1])
-    with col_head1: st.title("🏫 TugasKu: Jadwal Sekolah")
+    with col_head1:
+        st.title("🏫 TugasKu: Jadwal Sekolah")
+    with col_head2:
+        if is_logged_in():
+            st.success("🟢 Google: Terhubung")
+            if st.button("🔓 Logout Google", use_container_width=True):
+                logout_google()
+                st.rerun()
+        else:
+            st.warning("🔴 Google: Belum Login")
     st.divider()
 
     # Admin Zone
@@ -110,27 +119,33 @@ def main():
             # Google Calendar Section
             st.divider()
             st.markdown("### 3. Google Calendar Sync")
-            if pilihan_nama and 'processed_data' in locals() and processed_data:
-                today = datetime.now()
-                default_monday = today - timedelta(days=today.weekday())
-                
-                col_sync1, col_sync2 = st.columns(2)
-                with col_sync1:
-                    sync_date = st.date_input("Pilih Tanggal Mulai (Senin):", default_monday)
-                with col_sync2:
-                    duration_opt = st.selectbox("Durasi Sinkronisasi:", ["1 Minggu", "6 Bulan (26 Minggu)"])
-                    num_weeks = 1 if duration_opt == "1 Minggu" else 26
 
-                if sync_date.weekday() != 0:
-                    st.warning("⚠️ Sebaiknya pilih hari Senin agar sinkronisasi hari sesuai.")
-                
-                col_btn1, col_btn2 = st.columns(2)
-                with col_btn1:
-                    if st.button("🔄 Sync & Update Calendar", type="primary", use_container_width=True):
-                        sync_to_google_calendar(processed_data, sync_date, num_weeks=num_weeks)
-                with col_btn2:
-                    if st.button("🗑️ Bersihkan Calendar", type="secondary", use_container_width=True):
-                        delete_from_google_calendar(sync_date, pilihan_nama, num_weeks=num_weeks)
+            # Tampilkan status login & tombol login/logout yang selalu terlihat
+            if not is_logged_in():
+                from src.google_calendar import _show_login_button
+                _show_login_button()
+            else:
+                if pilihan_nama and 'processed_data' in locals() and processed_data:
+                    today = datetime.now()
+                    default_monday = today - timedelta(days=today.weekday())
+
+                    col_sync1, col_sync2 = st.columns(2)
+                    with col_sync1:
+                        sync_date = st.date_input("Pilih Tanggal Mulai (Senin):", default_monday)
+                    with col_sync2:
+                        duration_opt = st.selectbox("Durasi Sinkronisasi:", ["1 Minggu", "6 Bulan (26 Minggu)"])
+                        num_weeks = 1 if duration_opt == "1 Minggu" else 26
+
+                    if sync_date.weekday() != 0:
+                        st.warning("⚠️ Sebaiknya pilih hari Senin agar sinkronisasi hari sesuai.")
+
+                    col_btn1, col_btn2 = st.columns(2)
+                    with col_btn1:
+                        if st.button("🔄 Sync & Update Calendar", type="primary", use_container_width=True):
+                            sync_to_google_calendar(processed_data, sync_date, num_weeks=num_weeks)
+                    with col_btn2:
+                        if st.button("🗑️ Bersihkan Calendar", type="secondary", use_container_width=True):
+                            delete_from_google_calendar(sync_date, pilihan_nama, num_weeks=num_weeks)
 
         # TAMPILAN GURU
         if pilihan_nama and 'processed_data' in locals() and processed_data:
