@@ -8,7 +8,11 @@ def main():
     print("Memulai proses autentikasi (akan membuka browser)...")
     try:
         flow = InstalledAppFlow.from_client_secrets_file('client_secret.json', SCOPES)
-        creds = flow.run_local_server(port=0)
+        # open_browser=False mencegah error jika dijalankan di Docker (headless)
+        # port=8080 dipakai agar kita tahu port yang harus diakses
+        print("\n\n=== ACTION REQUIRED ===")
+        print("Jika browser tidak terbuka otomatis, silakan BUKA LINK DI BAWAH INI di browser Anda:")
+        creds = flow.run_local_server(port=8080, open_browser=False)
         
         with open('token.pickle', 'wb') as token:
             pickle.dump(creds, token)
