@@ -211,19 +211,32 @@ def ekstrak_semua_guru(pdf, nomor_halaman):
     if nomor_halaman is None: return {}
     page = pdf.pages[nomor_halaman]
     tables = page.extract_tables()
+    
     for table in tables:
         for row in table:
-            clean_row = [str(x).strip() for x in row if x]
-            for i in [0, 3, 6]:
-                if i + 2 < len(clean_row): 
+            # Bersihkan baris
+            clean_row = [str(x).strip() if x else "" for x in row]
+            
+            # Di PDF kamu, polanya adalah:
+            # [KODE] [NAMA] [NIP] [MAPEL]
+            # Karena ada 4 kolom per orang, kita gunakan lompatan 4
+            for i in range(0, len(clean_row), 4):
+                if i + 3 < len(clean_row): 
                     raw_kode = clean_row[i].split()[0] if clean_row[i] else ""
-                    if len(raw_kode) > 2 and re.match(r'^\d+8$', raw_kode): raw_kode = raw_kode[:-1] + "B"
                     
-                    nama = clean_row[i+1]
-                    mapel = clean_row[i+2]
+                    # Normalisasi kode 328 -> 32B (jika ada)
+                    if len(raw_kode) > 2 and re.match(r'^\d+8$', raw_kode): 
+                        raw_kode = raw_kode[:-1] + "B"
                     
-                    if re.match(r'^\d+[A-Z]?$', raw_kode) and len(nama) > 2:
-                        data_guru[raw_kode] = {'nama': nama.replace('\n', ' '), 'mapel': mapel.replace('\n', ' ')}
+                    nama = clean_row[i+1].replace('\n', ' ')
+                    # clean_row[i+2] adalah NIP (Kita lewati/abaikan)
+                    mapel = clean_row[i+3].replace('\n', ' ')
+                    
+                    if raw_kode and len(nama) > 2:
+                        data_guru[raw_kode] = {
+                            'nama': nama,  # Masuk ke field Nama
+                            'mapel': mapel # Masuk ke field Mapel
+                        }
     return data_guru
 
 def ekstrak_seluruh_jadwal(pdf, halaman_jadwal_list):
@@ -282,7 +295,7 @@ def ekstrak_seluruh_jadwal(pdf, halaman_jadwal_list):
 # ==========================================
 # 4. USER INTERFACE
 # ==========================================
-st.set_page_config(page_title="TugasKu - Jadwal Sekolah", layout="wide")
+st.set_page_config(page_title="TugasKu - Jadwal Sekolah V.01", layout="wide")
 
 st.markdown("""
 <style>

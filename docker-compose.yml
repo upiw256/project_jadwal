@@ -4,11 +4,12 @@ services:
   tugasku:
     build: .
     container_name: tugasku_app
-    restart: always  # PENTING: Aplikasi akan nyala sendiri jika VPS restart
+    restart: always
     ports:
-      - "7025:8501"    # Mapping Port: Akses via port 80 (langsung IP) -> ke internal 8501
+      - "7025:8501"  # Akses Web Streamlit
+      - "8000:8000"  # Akses API GET
     volumes:
-      # PENTING: Agar file database_jadwal.json tidak hilang saat container dihapus/update
+      # Sinkronisasi database agar tidak hilang saat container restart
       - ./database_jadwal.json:/app/database_jadwal.json
     environment:
-      - TZ=Asia/Jakarta # Mengatur zona waktu container
+      - TZ=Asia/Jakarta
