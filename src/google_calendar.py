@@ -47,29 +47,6 @@ def get_calendar_service():
         st.error("❌ File 'client_secret.json' tidak ditemukan di server.")
         return None
 
-    # Cek apakah Google mengirim callback dengan ?code=...
-    query_params = st.query_params
-    auth_code = query_params.get("code")
-
-    if auth_code:
-        # Tukar auth_code dengan token
-        try:
-            flow = Flow.from_client_secrets_file(
-                CLIENT_SECRET_PATH,
-                scopes=SCOPES,
-                redirect_uri=REDIRECT_URI
-            )
-            flow.fetch_token(code=auth_code)
-            creds = flow.credentials
-            _save_creds(creds)
-            # Bersihkan query params agar tidak loop
-            st.query_params.clear()
-            st.success("✅ Login Google berhasil! Silakan tekan tombol Sync kembali.")
-            st.rerun()
-        except Exception as e:
-            st.error(f"❌ Gagal tukar token: {e}")
-        return None
-
     # Tampilkan tombol login
     _show_login_button()
     return None
@@ -86,18 +63,60 @@ def _show_login_button():
         scopes=SCOPES,
         redirect_uri=REDIRECT_URI
     )
-    auth_url, _ = flow.authorization_url(
+    auth_url, state = flow.authorization_url(
         access_type='offline',
         include_granted_scopes='true',
         prompt='consent'
     )
+    
+    import json
+    with open('oauth_state.json', 'w') as f:
+        json.dump({
+            'state': state,
+            'code_verifier': getattr(flow, 'code_verifier', None)
+        }, f)
 
     st.warning("⚠️ Belum login ke Google. Klik tombol di bawah untuk otorisasi akses Google Calendar.")
     st.link_button("🔐 Login dengan Google", auth_url, use_container_width=True)
 
 
 def is_logged_in():
-    """Cek apakah token sudah ada dan valid."""
+    """Cek apakah token sudah ada dan valid, atau menangkap callback login."""
+    # Tangkap callback URL dari Google jika ada
+    query_params = st.query_params
+    auth_code = query_params.get("code")
+    
+    if auth_code:
+        try:
+            import json
+            saved_state = None
+            code_verifier = None
+            if os.path.exists('oauth_state.json'):
+                with open('oauth_state.json', 'r') as f:
+                    data = json.load(f)
+                    saved_state = data.get('state')
+                    code_verifier = data.get('code_verifier')
+
+            flow = Flow.from_client_secrets_file(
+                CLIENT_SECRET_PATH,
+                scopes=SCOPES,
+                redirect_uri=REDIRECT_URI,
+                state=saved_state
+            )
+            if code_verifier:
+                flow.code_verifier = code_verifier
+
+            flow.fetch_token(code=auth_code)
+            _save_creds(flow.credentials)
+            st.query_params.clear()
+            if os.path.exists('oauth_state.json'):
+                os.remove('oauth_state.json')
+            st.success("✅ Login Google berhasil! Silakan lanjutkan.")
+            return True
+        except Exception as e:
+            st.error(f"❌ Gagal tukar token: {e}")
+            return False
+
     if not os.path.exists(TOKEN_PATH) or not os.path.isfile(TOKEN_PATH):
         return False
     try:
