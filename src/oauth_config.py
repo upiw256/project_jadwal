@@ -2,7 +2,7 @@ import os
 from urllib.parse import urlparse
 
 
-def normalize_redirect_uri(value: str | None) -> str:
+def normalize_redirect_uri(value):
     """Normalize redirect URI so it matches Google OAuth expectations.
 
     Google requires the redirect URI to be an exact match to the URL registered
