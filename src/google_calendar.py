@@ -1,3 +1,4 @@
+import json
 import os
 import pickle
 from googleapiclient.discovery import build
@@ -61,6 +62,16 @@ def _show_login_button():
         st.error("❌ File 'client_secret.json' tidak ditemukan.")
         return
 
+    with open(CLIENT_SECRET_PATH, 'r', encoding='utf-8') as f:
+        secret_data = json.load(f)
+
+    if 'web' not in secret_data:
+        st.error(
+            "❌ client_secret.json harus berasal dari OAuth 2.0 Client ID tipe 'Web application'. "
+            "Silakan buat ulang kredensial di Google Cloud Console dan gunakan file JSON yang baru."
+        )
+        return
+
     flow = Flow.from_client_secrets_file(
         CLIENT_SECRET_PATH,
         scopes=SCOPES,
@@ -80,6 +91,8 @@ def _show_login_button():
         }, f)
 
     st.warning("⚠️ Belum login ke Google. Klik tombol di bawah untuk otorisasi akses Google Calendar.")
+    st.caption(f"Redirect URI yang dipakai: {REDIRECT_URI}")
+    st.caption("Pastikan URI ini sudah didaftarkan di Google Cloud Console persis sama, termasuk trailing slash.")
     st.link_button("🔐 Login dengan Google", auth_url, use_container_width=True)
 
 
