@@ -82,9 +82,8 @@ def _show_login_button():
         include_granted_scopes='true',
         prompt='consent'
     )
-    
-    import json
-    with open('oauth_state.json', 'w') as f:
+
+    with open('oauth_state.json', 'w', encoding='utf-8') as f:
         json.dump({
             'state': state,
             'code_verifier': getattr(flow, 'code_verifier', None)
