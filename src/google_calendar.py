@@ -65,10 +65,24 @@ def _show_login_button():
     with open(CLIENT_SECRET_PATH, 'r', encoding='utf-8') as f:
         secret_data = json.load(f)
 
-    if 'web' not in secret_data:
+    # Show client info for debugging redirect_uri mismatches
+    client_type = 'web' if 'web' in secret_data else ('installed' if 'installed' in secret_data else None)
+    client_info = secret_data.get(client_type, {}) if client_type else {}
+    client_id = client_info.get('client_id')
+    client_redirects = client_info.get('redirect_uris')
+
+    st.caption(f"Client type in JSON: {client_type}")
+    if client_id:
+        st.caption(f"Client ID in JSON: {client_id}")
+    if client_redirects:
+        st.caption("Redirect URIs in client_secret.json:")
+        for r in client_redirects:
+            st.caption(f" - {r}")
+
+    if client_type != 'web':
         st.error(
-            "❌ client_secret.json harus berasal dari OAuth 2.0 Client ID tipe 'Web application'. "
-            "Silakan buat ulang kredensial di Google Cloud Console dan gunakan file JSON yang baru."
+            "❌ client_secret.json tidak berisi kredensial tipe 'web'. "
+            "Jika Anda menerima 'redirect_uri_mismatch', buat OAuth Client ID baru dengan tipe 'Web application' di Google Cloud Console dan unduh JSON baru."
         )
         return
 
@@ -82,6 +96,16 @@ def _show_login_button():
         include_granted_scopes='true',
         prompt='consent'
     )
+    # Parse the auth_url to extract the redirect_uri param for debugging
+    try:
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(auth_url)
+        q = parse_qs(parsed.query)
+        sent_redirect = q.get('redirect_uri', [None])[0]
+        if sent_redirect:
+            st.caption(f"redirect_uri sent to Google: {sent_redirect}")
+    except Exception:
+        pass
 
     with open('oauth_state.json', 'w', encoding='utf-8') as f:
         json.dump({
