@@ -7,13 +7,16 @@ from google.oauth2.credentials import Credentials
 from datetime import timedelta
 import streamlit as st
 
+from src.oauth_config import get_redirect_uri
+
 SCOPES = ['https://www.googleapis.com/auth/calendar.events']
 TOKEN_PATH = 'token.pickle'
 CLIENT_SECRET_PATH = 'client_secret.json'
 
-# Redirect URI harus sama persis dengan yang ada di Google Cloud Console
-# Untuk Docker/VPS, ganti dengan URL publik Anda, misal: http://YOUR_VPS_IP:7025/
-REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8501/")
+# Redirect URI harus sama persis dengan yang ada di Google Cloud Console.
+# Untuk deployment publik, pastikan URL publik yang dipakai sama persis dengan
+# yang didaftarkan di Google Cloud Console, termasuk trailing slash.
+REDIRECT_URI = get_redirect_uri()
 
 
 def _save_creds(creds):

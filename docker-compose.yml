@@ -17,4 +17,4 @@ services:
     environment:
       - TZ=Asia/Jakarta
       # Ganti dengan URL publik VPS Anda (harus sama dengan yang di Google Cloud Console)
-      - GOOGLE_REDIRECT_URI=http://YOUR_VPS_IP:7025/
+      - GOOGLE_REDIRECT_URI=https://jadwal.sman1margaasih.sch.id/
