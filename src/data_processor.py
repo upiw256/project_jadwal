@@ -30,3 +30,11 @@ def get_teacher_info_display(codes, teacher_dict):
         name = teacher_dict.get(c, {}).get('nama', c)
         res.append(name)
     return ", ".join(res)
+
+def get_subject_info_display(codes, teacher_dict):
+    """Gets subject names from codes list."""
+    res = []
+    for c in codes:
+        mapel = teacher_dict.get(c, {}).get('mapel', c)
+        res.append(mapel)
+    return ", ".join(res)

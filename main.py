@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 # Import Modules
 from src.database_manager import read_database, save_database, reset_database
 from src.pdf_parser import identify_pages, extract_all_teachers, extract_all_schedules
-from src.data_processor import create_matrix_table, get_teacher_info_display
+from src.data_processor import create_matrix_table, get_teacher_info_display, get_subject_info_display
 from src.exporter import export_to_excel, export_to_pdf
 from src.google_calendar import sync_to_google_calendar, delete_from_google_calendar, is_logged_in, logout_google
 
@@ -184,7 +184,7 @@ def main():
                 df_master = pd.DataFrame(list_jadwal)
                 df_kelas_filtered = df_master[df_master['kelas'] == pilihan_kelas].copy()
                 if not df_kelas_filtered.empty:
-                    df_kelas_filtered['isi_sel'] = df_kelas_filtered['list_kode_guru'].apply(lambda x: get_teacher_info_display(x, dict_guru))
+                    df_kelas_filtered['isi_sel'] = df_kelas_filtered['list_kode_guru'].apply(lambda x: get_subject_info_display(x, dict_guru))
                     df_kelas_filtered['isi_lengkap'] = df_kelas_filtered.apply(lambda x: f"{x['isi_sel']}\n({x['waktu']})", axis=1)
                     df_matrix_kelas = create_matrix_table(df_kelas_filtered, 'isi_lengkap')
                     st.dataframe(df_matrix_kelas, width=2000, use_container_width=True, hide_index=True)
