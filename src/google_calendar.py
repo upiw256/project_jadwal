@@ -1,3 +1,4 @@
+import json
 import os
 import pickle
 from googleapiclient.discovery import build
@@ -7,13 +8,16 @@ from google.oauth2.credentials import Credentials
 from datetime import timedelta
 import streamlit as st
 
+from src.oauth_config import get_redirect_uri
+
 SCOPES = ['https://www.googleapis.com/auth/calendar.events']
 TOKEN_PATH = 'token.pickle'
 CLIENT_SECRET_PATH = 'client_secret.json'
 
-# Redirect URI harus sama persis dengan yang ada di Google Cloud Console
-# Untuk Docker/VPS, ganti dengan URL publik Anda, misal: http://YOUR_VPS_IP:7025/
-REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8501/")
+# Redirect URI harus sama persis dengan yang ada di Google Cloud Console.
+# Untuk deployment publik, pastikan URL publik yang dipakai sama persis dengan
+# yang didaftarkan di Google Cloud Console, termasuk trailing slash.
+REDIRECT_URI = get_redirect_uri()
 
 
 def _save_creds(creds):
@@ -58,6 +62,30 @@ def _show_login_button():
         st.error("❌ File 'client_secret.json' tidak ditemukan.")
         return
 
+    with open(CLIENT_SECRET_PATH, 'r', encoding='utf-8') as f:
+        secret_data = json.load(f)
+
+    # Show client info for debugging redirect_uri mismatches
+    client_type = 'web' if 'web' in secret_data else ('installed' if 'installed' in secret_data else None)
+    client_info = secret_data.get(client_type, {}) if client_type else {}
+    client_id = client_info.get('client_id')
+    client_redirects = client_info.get('redirect_uris')
+
+    st.caption(f"Client type in JSON: {client_type}")
+    if client_id:
+        st.caption(f"Client ID in JSON: {client_id}")
+    if client_redirects:
+        st.caption("Redirect URIs in client_secret.json:")
+        for r in client_redirects:
+            st.caption(f" - {r}")
+
+    if client_type != 'web':
+        st.error(
+            "❌ client_secret.json tidak berisi kredensial tipe 'web'. "
+            "Jika Anda menerima 'redirect_uri_mismatch', buat OAuth Client ID baru dengan tipe 'Web application' di Google Cloud Console dan unduh JSON baru."
+        )
+        return
+
     flow = Flow.from_client_secrets_file(
         CLIENT_SECRET_PATH,
         scopes=SCOPES,
@@ -68,15 +96,26 @@ def _show_login_button():
         include_granted_scopes='true',
         prompt='consent'
     )
-    
-    import json
-    with open('oauth_state.json', 'w') as f:
+    # Parse the auth_url to extract the redirect_uri param for debugging
+    try:
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(auth_url)
+        q = parse_qs(parsed.query)
+        sent_redirect = q.get('redirect_uri', [None])[0]
+        if sent_redirect:
+            st.caption(f"redirect_uri sent to Google: {sent_redirect}")
+    except Exception:
+        pass
+
+    with open('oauth_state.json', 'w', encoding='utf-8') as f:
         json.dump({
             'state': state,
             'code_verifier': getattr(flow, 'code_verifier', None)
         }, f)
 
     st.warning("⚠️ Belum login ke Google. Klik tombol di bawah untuk otorisasi akses Google Calendar.")
+    st.caption(f"Redirect URI yang dipakai: {REDIRECT_URI}")
+    st.caption("Pastikan URI ini sudah didaftarkan di Google Cloud Console persis sama, termasuk trailing slash.")
     st.link_button("🔐 Login dengan Google", auth_url, use_container_width=True)
 
 
