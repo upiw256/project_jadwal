@@ -17,5 +17,5 @@ COPY . .
 # Membuka port default Streamlit
 EXPOSE 8501
 
-# Perintah agar aplikasi berjalan saat container dimulai
-ENTRYPOINT ["streamlit", "run", "main.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Perintah agar aplikasi berjalan saat container dimulai (gunakan CMD agar bisa dioverride via docker-compose)
+CMD ["streamlit", "run", "main.py", "--server.port=8501", "--server.address=0.0.0.0"]
