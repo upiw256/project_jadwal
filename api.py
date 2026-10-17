@@ -1,13 +1,23 @@
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List, Dict
 import json
 import os
 
 app = FastAPI(
-    title="API Jadwal Sekolah",
+    title="API Jadwal SMAN 1 Margaasih",
     description="API untuk mendapatkan data Guru dan Jadwal Pelajaran.",
     version="1.0.0",
     docs_url="/docs"
+)
+
+# Mengizinkan CORS agar API bisa diakses dari browser / frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 DB_PATH = "database_jadwal.json"
