@@ -31,6 +31,16 @@ def get_db():
     except Exception:
         return {"guru": {}, "jadwal": []}
 
+@app.get("/", tags=["Root"])
+@app.get("/api", tags=["Root"])
+def root():
+    return {
+        "status": "online",
+        "service": "REST API Jadwal SMAN 1 Margaasih",
+        "docs_url": "/docs",
+        "version": "1.0.0"
+    }
+
 @app.get("/api/guru", tags=["Guru"])
 def get_all_guru():
     """Mendapatkan seluruh daftar guru beserta kodenya."""
